@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
+<meta name="theme-color" content="#1C1A17">
 <title>THE TERMINAL — SKU Ledger</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -357,6 +359,62 @@
     font-size:10.5px;
     color:var(--ink-soft);
     line-height:1.6;
+  }
+
+  /* ===== Mobile ===== */
+  @media (max-width: 640px){
+    .wrap{ padding:24px 16px 56px; }
+
+    .masthead{
+      flex-direction:column;
+      align-items:flex-start;
+      gap:10px;
+    }
+    .rate-badge{
+      text-align:left;
+      width:100%;
+    }
+    .rate-badge button{ padding:6px 12px; }
+
+    .search-row input{
+      font-size:17px;
+      padding:13px 14px;
+    }
+    .search-row .count{
+      padding-right:10px;
+      font-size:10px;
+    }
+
+    .result{ padding:16px 14px; }
+    .result .desc{ font-size:18px; }
+    .stamp{ font-size:24px; padding:5px 12px; }
+    .stamp-sm{ font-size:17px; padding:4px 10px; }
+    .price-row{ gap:12px; }
+
+    /* Tables scroll horizontally instead of squeezing columns unreadably */
+    .scroll-table{
+      overflow-x:auto;
+      -webkit-overflow-scrolling:touch;
+      max-height:60vh;
+    }
+    .scroll-table table{ min-width:560px; }
+    td, th{ font-size:11.5px; padding:7px 6px; }
+
+    /* Pending row: stack the SKU input + button under the description */
+    .pending-row td:last-child{
+      display:flex;
+      flex-wrap:wrap;
+      align-items:center;
+      gap:6px;
+    }
+    .pending-row input{ width:100px; }
+
+    .ledger-label{ font-size:10px; }
+    h1{ font-size:30px; }
+    .sub{ font-size:9.5px; }
+
+    details{ margin-top:28px; }
+    textarea{ font-size:13px; }
   }
 </style>
 </head>
