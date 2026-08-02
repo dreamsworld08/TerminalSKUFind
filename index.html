@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>THE TERMINAL — SKU Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F5F1E7;
+    --paper-dim:#EDE7D8;
+    --ink:#1C1A17;
+    --ink-soft:#5B564C;
+    --stamp:#A32A2A;
+    --rupee:#8A6A2E;
+    --line:#C9C0AC;
+    --amber-bg:#FBF4E4;
+    --amber-line:#C79A3A;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Source Serif 4', Georgia, serif;
+    min-height:100vh;
+  }
+  .wrap{
+    max-width:880px;
+    margin:0 auto;
+    padding:48px 28px 80px;
+  }
+
+  .masthead{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-end;
+    gap:16px;
+    border-bottom:3px solid var(--ink);
+    padding-bottom:14px;
+    margin-bottom:6px;
+    flex-wrap:wrap;
+  }
+  h1{
+    font-family:'Fraunces', serif;
+    font-weight:700;
+    font-optical-sizing:auto;
+    font-size:clamp(34px,6vw,52px);
+    letter-spacing:-0.01em;
+    margin:0;
+    line-height:0.95;
+  }
+  .sub{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.16em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    margin-top:6px;
+  }
+  .rate-badge{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    text-align:right;
+    color:var(--ink-soft);
+    line-height:1.5;
+    white-space:nowrap;
+  }
+  .rate-badge b{ color:var(--ink); font-weight:600; }
+  .rate-badge button{
+    margin-top:4px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10px;
+    letter-spacing:0.05em;
+    background:none;
+    border:1px solid var(--line);
+    color:var(--ink-soft);
+    padding:3px 8px;
+    cursor:pointer;
+    border-radius:2px;
+  }
+  .rate-badge button:hover{ border-color:var(--ink); color:var(--ink); }
+
+  .ledger-label{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.16em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    margin:26px 0 8px;
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+  }
+  .ledger-label span.n{ color:var(--ink); }
+
+  .search-row{
+    display:flex;
+    border:2px solid var(--ink);
+    background:#FFFEFA;
+  }
+  .search-row input{
+    flex:1;
+    border:none;
+    background:none;
+    outline:none;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:20px;
+    letter-spacing:0.03em;
+    padding:16px 18px;
+    color:var(--ink);
+  }
+  .search-row input::placeholder{ color:#A69F8E; }
+  .search-row .count{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    color:var(--ink-soft);
+    align-self:center;
+    padding-right:16px;
+    white-space:nowrap;
+  }
+
+  .result{
+    margin-top:22px;
+    border:1px solid var(--line);
+    background:#FFFEFA;
+    padding:22px 24px;
+    display:none;
+  }
+  .result.show{ display:block; }
+  .result .sku{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:13px;
+    letter-spacing:0.08em;
+    color:var(--ink-soft);
+    text-transform:uppercase;
+  }
+  .result .desc{
+    font-family:'Fraunces', serif;
+    font-size:22px;
+    font-weight:600;
+    margin:6px 0 2px;
+  }
+  .result .meta{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    color:var(--ink-soft);
+  }
+  .price-row{
+    display:flex;
+    align-items:center;
+    gap:22px;
+    margin-top:18px;
+    flex-wrap:wrap;
+  }
+  .usd-price{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:14px;
+    color:var(--ink-soft);
+  }
+  .stamp{
+    font-family:'Fraunces', serif;
+    font-weight:700;
+    font-size:30px;
+    color:var(--stamp);
+    border:2.5px solid var(--stamp);
+    padding:6px 16px;
+    transform:rotate(-3deg);
+    display:inline-block;
+    position:relative;
+  }
+  .stamp small{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    font-weight:500;
+    letter-spacing:0.05em;
+    display:block;
+    text-align:center;
+    color:var(--stamp);
+    opacity:0.85;
+  }
+  .stamp-sm{
+    font-size:20px;
+    padding:4px 12px;
+  }
+  .variant-note{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    color:var(--ink-soft);
+    margin-bottom:12px;
+  }
+  .variant-item{
+    padding:14px 0;
+    border-bottom:1px solid var(--line);
+  }
+  .variant-item:last-child{ border-bottom:none; }
+  .variant-item .desc{
+    font-family:'Fraunces', serif;
+    font-size:17px;
+    font-weight:600;
+    margin:0 0 8px;
+  }
+
+  .empty{
+    margin-top:22px;
+    padding:20px 24px;
+    border:1px dashed var(--line);
+    font-family:'IBM Plex Mono', monospace;
+    font-size:13px;
+    color:var(--ink-soft);
+    display:none;
+  }
+  .empty.show{ display:block; }
+
+  table{
+    width:100%;
+    border-collapse:collapse;
+    margin-top:8px;
+  }
+  th{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10px;
+    letter-spacing:0.1em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    text-align:left;
+    border-bottom:1px solid var(--ink);
+    padding:6px 8px;
+  }
+  td{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12.5px;
+    padding:8px;
+    border-bottom:1px solid var(--line);
+    vertical-align:top;
+  }
+  td.desc-cell{ font-family:'Source Serif 4', serif; font-size:13.5px; }
+  td.inr{ color:var(--rupee); font-weight:500; }
+  tr:hover td{ background:var(--paper-dim); }
+
+  .scroll-table{ max-height:420px; overflow-y:auto; border-bottom:1px solid var(--line); }
+  .scroll-table table{ margin-top:0; }
+  .scroll-table thead th{ position:sticky; top:0; background:var(--paper); }
+
+  .pending-note{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    color:var(--ink-soft);
+    line-height:1.6;
+    margin-bottom:10px;
+  }
+  .pending-row td{ background:var(--amber-bg); }
+  .pending-row input{
+    width:110px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    border:1px solid var(--amber-line);
+    background:#FFFEFA;
+    padding:5px 7px;
+  }
+  .pending-row button{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10.5px;
+    letter-spacing:0.04em;
+    text-transform:uppercase;
+    background:var(--ink);
+    color:var(--paper);
+    border:none;
+    padding:6px 10px;
+    cursor:pointer;
+    margin-left:6px;
+  }
+  .pending-row button:hover{ background:#000; }
+  .pstatus{ font-family:'IBM Plex Mono', monospace; font-size:10px; color:var(--rupee); margin-left:6px; }
+
+  details{
+    margin-top:38px;
+    border-top:1px solid var(--line);
+    padding-top:14px;
+  }
+  summary{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.1em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    cursor:pointer;
+  }
+  summary:hover{ color:var(--ink); }
+  .add-box{ margin-top:14px; }
+  .add-box p{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    color:var(--ink-soft);
+    line-height:1.6;
+  }
+  textarea{
+    width:100%;
+    min-height:100px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12.5px;
+    border:1px solid var(--line);
+    background:#FFFEFA;
+    padding:10px 12px;
+    resize:vertical;
+  }
+  .add-actions{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-top:10px;
+  }
+  .add-actions button{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.05em;
+    text-transform:uppercase;
+    background:var(--ink);
+    color:var(--paper);
+    border:none;
+    padding:9px 18px;
+    cursor:pointer;
+  }
+  .add-actions button:hover{ background:#000; }
+  .status{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    color:var(--ink-soft);
+  }
+  .flagged{
+    margin-top:14px;
+    border-left:3px solid var(--stamp);
+    padding:10px 14px;
+    background:#FBF2F2;
+    display:none;
+  }
+  .flagged.show{ display:block; }
+  .flagged .ftitle{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    color:var(--stamp);
+    margin-bottom:6px;
+  }
+  .flagged div.frow{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    color:var(--ink);
+    padding:2px 0;
+  }
+
+  footer{
+    margin-top:40px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10.5px;
+    color:var(--ink-soft);
+    line-height:1.6;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="masthead">
+    <div>
+      <h1>THE TERMINAL</h1>
+      <div class="sub">Luxury Designer Furniture — SKU Ledger</div>
+    </div>
+    <div class="rate-badge">
+      1 USD = <b id="rateDisplay">₹95.40</b><br>
+      as of <span id="rateDate">2 Aug 2026</span><br>
+      <button id="refreshRate">update rate</button>
+    </div>
+  </div>
+
+  <div class="ledger-label">Find price by SKU</div>
+  <div class="search-row">
+    <input id="searchInput" type="text" placeholder="Enter SKU — e.g. ES2405" autocomplete="off" spellcheck="false">
+    <div class="count" id="itemCount"></div>
+  </div>
+
+  <div class="result" id="resultCard">
+    <div class="sku" id="rSku"></div>
+    <div id="resultBody"></div>
+  </div>
+
+  <div class="empty" id="emptyState">No SKU matching that entry in the ledger yet.</div>
+
+  <div class="flagged" id="dupLog">
+    <div class="ftitle">Exact duplicates skipped — identical SKU and price already in the ledger</div>
+    <div id="dupLogList"></div>
+  </div>
+
+  <div class="ledger-label" style="margin-top:32px;">Full ledger <span class="n" id="ledgerCount"></span></div>
+  <div class="scroll-table">
+    <table>
+      <thead><tr><th>SKU</th><th>Description</th><th>USD</th><th>INR</th></tr></thead>
+      <tbody id="ledgerBody"></tbody>
+    </table>
+  </div>
+
+  <div class="ledger-label" style="margin-top:32px;">Needs a SKU <span class="n" id="pendingCount"></span></div>
+  <div class="pending-note">These items had no model/SKU number in the source. Type a SKU next to any row and save it to move that item into the searchable ledger above.</div>
+  <div class="scroll-table" id="pendingWrap">
+    <table>
+      <thead><tr><th>Description</th><th>USD</th><th>Assign SKU</th></tr></thead>
+      <tbody id="pendingBody"></tbody>
+    </table>
+  </div>
+
+  <details>
+    <summary>+ Add more SKUs to the ledger</summary>
+    <div class="add-box">
+      <p>Paste one item per line, comma-separated: <b>SKU, description, price in USD</b>. Leave the price off if you don't have it yet — the item still gets added, flagged as "needs price".<br>
+      A SKU can repeat if the description or price is different — that's kept as a separate variant. Only an exact repeat (same SKU, price, and description) gets skipped.</p>
+      <textarea id="bulkInput" placeholder="ES2412, 4 Seater Sofa, Leather Metal, Grey, 3500x1180x660mm, 8100"></textarea>
+      <div class="add-actions">
+        <button id="addBtn">Add to ledger</button>
+        <span class="status" id="addStatus"></span>
+      </div>
+    </div>
+  </details>
+
+  <footer>
+    Rate is entered manually — click "update rate" and paste today's mid-market USD→INR rate to refresh it.
+    Data is saved in this browser only (no shared server database yet), so edits made on one device or browser won't appear on another.
+  </footer>
+
+</div>
+
+<script>
+let RATE = 95.40;
+let RATE_DATE = "2 Aug 2026";
+const STORE_KEY = "terminal-master-list";
+const RATE_KEY = "terminal-usd-inr-rate";
+const PENDING_KEY = "terminal-pending-nosku";
+const SKIPPED_KEY = "terminal-skipped-log";
+
+const ITEMS_SEED = [
+  { sku:"1829", description:"3 Seat+L.A.F. Chaise, Leather, L.Blue, 2760x1760x820mm", usd:2670 },
+  { sku:"1829", description:"3 Seat+L.A.F. Chaise, Leather, Green, 2760x1760x820mm", usd:2880 },
+  { sku:"1829", description:"3 Seat+R.A.F. Chaise, Leather, L.Blue, 2760x1760x820mm", usd:2670 },
+  { sku:"1829", description:"3 Seat+R.A.F. Chaise, Leather, Green, 2760x1760x820mm", usd:2880 },
+  { sku:"22034#", description:"4 Seat, Full Leather, Granite/Taupe, 3040x1050x880mm", usd:2550 },
+  { sku:"23043#", description:"4 Seat, Full Leather, 019#/L40713/Green, 3720x1450x900mm", usd:3060 },
+  { sku:"24027#", description:"4 Seat, Full Leather, Camel/Granite, 2970x1050x880mm", usd:2520 },
+  { sku:"24036#", description:"4 Seat, Full Leather, RX-2421/L40713, 3220x1140x835mm", usd:2700 },
+  { sku:"2516", description:"4 Seat+Corner, Leather+O.Leather, Orange/Green, 4100x1050x800mm", usd:2955 },
+  { sku:"2578", description:"4 Seat, Leather+O.Leather, Beige, 3100x1050x820mm", usd:2700 },
+  { sku:"2578", description:"4 Seat+Ottoman, Fabric, White/Grey, 3100x1050x820+800x800mm", usd:2445 },
+  { sku:"2581", description:"2 Seat+Console, Leather+O.Leather, Beige/Green, 2200x1050x940mm", usd:2874 },
+  { sku:"2A06", description:"1 Seat, Leather+O.Leather, Beige/Green, 950x1050x820mm", usd:1080 },
+  { sku:"2A06", description:"4 Seat+Corner, Leather+O.Leather, Beige/Green, 2900x2900x820mm", usd:2904 },
+  { sku:"2A72", description:"4 Seat, Fabric (James), 3500x1100x820mm", usd:2190 },
+  { sku:"3509", description:"L Shape Sofa, Leather, T Cream/Olive Green, 4200x3000x660mm", usd:8865 },
+  { sku:"3516", description:"4 Seater Sofa, Leather Metal, Taupe, 3360x1000x730mm", usd:6500 },
+  { sku:"3516", description:"2 Seater Sofa, Leather Metal, Taupe, 2330x1000x730mm", usd:6500 },
+  { sku:"678", description:"Leisure Chair, Leather Metal, Olive Green, 830x710x780mm", usd:2308 },
+  { sku:"7308", description:"1 Seat Swivel Chair, Full Leather, Camel, 990x930x720mm", usd:705 },
+  { sku:"AM22132", description:"4 Seater Sofa, Fabric Wood, White, 1030x810x830mm", usd:940 },
+  { sku:"B2516", description:"Ottoman, fabric+high density sponge+ash solid wood base, dia460x460mm", usd:213 },
+  { sku:"BDAB26P", description:"Bed, Fabric/Microfiber, 2150x1890x1650mm", usd:2240 },
+  { sku:"BDCD26P", description:"Bed, MDF/Solid wood, 580x405x665mm", usd:2315 },
+  { sku:"C1952", description:"Dining chair, pvd+fine iron+ultra fiber leather, standard", usd:465 },
+  { sku:"C1960", description:"Dining chair, aluminium backed ultra fine fiber leather, standard", usd:730 },
+  { sku:"C1987", description:"Dining chair, aluminium backed ultra fine fiber leather, standard", usd:435 },
+  { sku:"C2518", description:"Dining chair, ultra fine leather pvd, 690x600x810mm", usd:825 },
+  { sku:"CBAB26P", description:"Cabinet, MDF/Solid wood, standard", usd:1375 },
+  { sku:"CCAB26P", description:"Combo coffee table (组合茶几), ss gold+aluminium+marble, 1235x1320x280 / 1000x990x350mm", usd:6550 },
+  { sku:"CCCD26P", description:"Combo coffee table (组合茶几), ss gun metal+aluminium+marble, 1235x1320x280 / 1000x990x350mm", usd:6550 },
+  { sku:"CD2524", description:"Puffy, Leather FurWhite, Wood Fur, 400x400x480mm", usd:605 },
+  { sku:"CE2027", description:"Leisure Chair, Fabric ANTHOLOGY-1/iron powder coated TK23, 650x815x720mm", usd:570 },
+  { sku:"CE2052-L", description:"Leisure Chair (left), Fabric RHEIN-63A/Iron coated TK26, 1070x760x760mm", usd:570 },
+  { sku:"CE2052-R", description:"Leisure Chair (right), Fabric RHEIN-63A/Iron coated TK26, 1070x760x760mm", usd:570 },
+  { sku:"CE2053", description:"Leisure Chair, Fabric RHEIN-40A/Iron coated TK23, 1140x720x770mm", usd:555 },
+  { sku:"CE2075", description:"Leisure Chair, Fabric ZJ697-23/Iron powder coated TK07, 730x775x770mm", usd:504 },
+  { sku:"CH2500", description:"Bench, Fabric XF-7013-1/iron powder coated TK23, 1520x460x450mm", usd:495 },
+  { sku:"CH2542", description:"Bench, Fabric Rhein-01A/Iron powder coated TK14, 1620x510x600mm", usd:534 },
+  { sku:"CHAB26P", description:"Chair, North American Oak/Microfiber, 860x800x980mm", usd:1055 },
+  { sku:"CHCD26P", description:"Chair, Plywood/High density foam/Fabric, standard", usd:375 },
+  { sku:"CHEF26P", description:"Dining chair (餐椅), pvd+fine iron+ultra leather, standard", usd:642 },
+  { sku:"CHGJ26P", description:"Dining chair (餐椅), pvd+fine mirror+ultra fiber leather, standard", usd:642 },
+  { sku:"CHIMPANGI", description:"L Corner Sofa, Leather Metal, Beige, 3500x1050x860mm", usd:5460 },
+  { sku:"CHKL26P", description:"Dining chair (餐椅), pvd+fine mirror+ultra fiber leather, standard", usd:642 },
+  { sku:"CHMN26P", description:"Dining chair (餐椅), brass+leather, standard", usd:824 },
+  { sku:"CJ22-412", description:"Stool, Wood, 380x480mm", usd:1050 },
+  { sku:"CJ22426", description:"Center Table Wood, Marble Wood, Walnut, 1000x1000x320mm", usd:770 },
+  { sku:"CJ22427", description:"Center Table Marble, Marble Wood, Black Saphire, 1000x1000x320mm", usd:1530 },
+  { sku:"CS2023", description:"Fabric: MUJI-01A, Iron powder coated TK07", usd:324 },
+  { sku:"CT1823S", description:"Small side table, aluminium painted, 460x310x600mm", usd:389 },
+  { sku:"CT1853S", description:"Side table, aluminium painted, hardware only, 600x480x610mm", usd:434 },
+  { sku:"CT2008", description:"Coffee table, Iron powder coated TK07/Marble Black Marquina/Volaka, 1500x900x330mm", usd:1386 },
+  { sku:"CT2046", description:"Coffee table, Iron powder coated TK01/Beige travertine matt, dia1050x350mm", usd:1170 },
+  { sku:"CT2129L", description:"Console (large), Iron coated TK01, 1400x700x420mm", usd:834 },
+  { sku:"CT2129S", description:"Console (small), Iron coated TK01, 500x500x500mm", usd:381 },
+  { sku:"CT2208S", description:"Side table, stainless steel mirror champagne gold, 570x350x560mm", usd:348 },
+  { sku:"CT2509", description:"Combo coffee table, aluminium painted, dia750x300 / dia570x400 / dia380x500mm", usd:3130 },
+  { sku:"CT2513S", description:"Side table, cast aluminium painted gold (distressed)+aluminium base, dia400x600mm", usd:392 },
+  { sku:"CTAB26P", description:"Console/entryway table (玄关), marble+ss gold+brass shape, 1200x460x850mm", usd:3833 },
+  { sku:"CTCD26P", description:"Console/entryway table (玄关), marble+ss gold+brass shape, 1200x460x850mm", usd:5206 },
+  { sku:"CTEF26P", description:"Console/entryway table (玄关), marble+ss gold+brass shape, gun metal, 1200x460x850mm", usd:4364 },
+  { sku:"CTGJ26P", description:"Console/entryway table (玄关), marble+ss gold+brass shape, gold, 1200x460x850mm", usd:4364 },
+  { sku:"CY108", description:"Bench, 54x56x77mm", usd:220 },
+  { sku:"DC-6604A", description:"Coffee table, walnut veneer+microfiber saddle leather+brushed grey stainless steel+tempered glass, 1135x1195x300mm", usd:1164 },
+  { sku:"DC-6604B", description:"Side table, natural marble+brushed grey stainless steel+tempered glass, dia1050x350mm", usd:939 },
+  { sku:"DC-8834", description:"Coffee table set, faux marble+saddle leather+sintered stone+brown glass+brushed grey stainless steel, 1100x995x370mm", usd:1212 },
+  { sku:"DC-8849", description:"Coffee table, natural marble+natural white oak veneer, 1420x920x340mm", usd:1023 },
+  { sku:"DD-8847", description:"Cabinet, E1 class board+oka veneer+painting, 700x480x975mm", usd:633 },
+  { sku:"DF-6621B", description:"Coat stand, ash solid wood+saddle leather+stainless steel frame+steel base, 380x380x1775mm", usd:351 },
+  { sku:"DG-8847", description:"Sideboard, E1 class board+oka veneer+painting, 2200x480x585mm", usd:846 },
+  { sku:"DH-5509", description:"Bench, E1 class board+painting+veneer+carbon steel, 1400x480x760mm", usd:1353 },
+  { sku:"DJ-8834", description:"Side table, sintered stone+brown glass+brushed grey stainless steel, 655x630x480mm", usd:366 },
+  { sku:"DJ-8849", description:"Side table, painting+natural white oak veneer+stainless steel, dia500x480mm — price not printed in source PDF", usd:null },
+  { sku:"DL-6608", description:"Side table, E1 class board+walnut veneer+saddle leather, 550x400x480mm", usd:357 },
+  { sku:"DL-8832", description:"Nightstand, walnut veneer+saddle leather, 550x400x445mm", usd:441 },
+  { sku:"DQ-6601A", description:"Cabinet, saddle leather+aluminium door+LED lighting+brushed grey stainless steel base, 1200x400x925mm", usd:1755 },
+  { sku:"DQ-6601B", description:"Cabinet, saddle leather+aluminium door+LED lighting+brushed grey stainless steel base, 1200x400x925mm", usd:1755 },
+  { sku:"DQ-6613", description:"Cabinet, brown glass+lighting+aluminum door frame+MDF+painting, 1200x420x1500mm", usd:1305 },
+  { sku:"DS-1802", description:"Bookshelf, microfiber saddle leather+brushed grey stainless steel, 1800x380x1885mm", usd:1668 },
+  { sku:"DS-8803", description:"Coat stand, saddle leather+stainless steel frame, 900x380x1890mm", usd:1155 },
+  { sku:"DS-8816A", description:"Bookshelf, E1 class board+painting+tempered glass, 800x360x1800mm", usd:789 },
+  { sku:"DS-8816B", description:"Bookshelf, E1 class board+painting+tempered glass, 500x360x1800mm", usd:696 },
+  { sku:"DS-8818", description:"Bookshelf, E1 class board+saddle leather+steel frame, 1200x470x1960mm", usd:1575 },
+  { sku:"DT2247", description:"Console table, Iron coated TK01, 1500x450x780mm", usd:804 },
+  { sku:"DT2271", description:"Console table, Iron powder coated TK18, trimming with gold, 1580x450x780mm", usd:1290 },
+  { sku:"DT897-1", description:"Console table, Natural Black Marquina marble/iron powder coated TK01, 1800x310x830mm", usd:1047 },
+  { sku:"DW-8817B", description:"Console table, faux marble+veneer+kettle, 1800x750x750mm", usd:1071 },
+  { sku:"DX-5517", description:"Console table, tempered glass+solid carbon steel base+E1 grade board+smoked veneer, 2260x540x780mm", usd:2817 },
+  { sku:"DX-6617", description:"Sideboard, walnut veneer+microfiber saddle leather+brown tempered glass+brushed grey stainless steel, 1800x850x910mm", usd:2760 },
+  { sku:"DX-8834", description:"Sideboard, faux marble+stainless steel decorate+steel base, 2000x420x800mm", usd:837 },
+  { sku:"DX-8847", description:"Sideboard, E1 class board+oka veneer+painting, 2000x480x855mm", usd:930 },
+  { sku:"DY-8818C", description:"Desk, woven saddle leather+steel frame+wheels, 530x530x790mm", usd:315 },
+  { sku:"DY-8840A", description:"Chair, saddle leather+steel inner+ash solid wood frame, 580x560x740mm", usd:405 },
+  { sku:"DZ-8802", description:"Desk, E1 class board+oka veneer+stainless steel, 1450x640x750mm", usd:1071 },
+  { sku:"DZ-8807", description:"Desk, E1 class board+painting+white veneer+carbon steel, (1500-1300)x420x750mm", usd:870 },
+  { sku:"DZ-8818B", description:"Desk, eucalyptus veneer+saddle leather+steel frame, 1600x700x760mm", usd:1398 },
+  { sku:"DZ-8832A", description:"Desk, walnut veneer+saddle leather, (2000-2700)x550x750mm", usd:1353 },
+  { sku:"ES2238", description:"4 Seater Sofa+Console, Leather Wood, Grey Black, 3560x1120x620mm", usd:6570 },
+  { sku:"ES2243", description:"L Corner Sofa, Fabric, White, 3200x1700x760mm", usd:3850 },
+  { sku:"ES2328", description:"1 Seater Sofa, Leather Metal, Red White, 1260x1040x670mm", usd:2769 },
+  { sku:"ES2328", description:"4 Seater Sofa, Leather FurWhite, White, 2820x1040x670mm", usd:5036 },
+  { sku:"ES2332", description:"4 Seater Sofa, Leather Fur Dark, Olive Green/Camel, 2800x960x630mm", usd:5345 },
+  { sku:"ES2346", description:"C Corner Sofa, Fabric Brown Bukly, Brown, 5530x1810x820mm", usd:6371 },
+  { sku:"ES2405", description:"4 Seat Sofa, Leather+Metal, Black, 3400x1100x650mm", usd:7250 },
+  { sku:"ES2405", description:"4 Seat Sofa, Leather+Metal+Wood, Camel, 3650x1100x650mm", usd:8610 },
+  { sku:"ES2408", description:"C Corner Sofa, Leather Fabric White, White/Olive Green, 4760x3200x650mm", usd:5419 },
+  { sku:"ES2412", description:"4 Seater Sofa, Leather+Metal, Grey, 3500x1180x660mm", usd:8100 },
+  { sku:"ES2418", description:"L Corner Sofa, Leather Metal, White, 3830x1530x690mm", usd:6650 },
+  { sku:"ES2418", description:"Half L Sofa, Leather Metal, Black, 4120x1820x690mm", usd:7835 },
+  { sku:"FC101", description:"Coffee Table (combo), 110x90/60x60mm", usd:655 },
+  { sku:"FC208", description:"Coffee Table, 80x34/70x43mm", usd:389 },
+  { sku:"FC210", description:"Coffee Table, 95x30/55x40mm", usd:435 },
+  { sku:"FC212", description:"Coffee Table, 85x35/45x45mm", usd:745 },
+  { sku:"FC217", description:"Coffee Table, 85x33/60x42mm", usd:480 },
+  { sku:"FC222", description:"Coffee Table, 90/50mm", usd:655 },
+  { sku:"FC224", description:"Coffee Table, 130x70/50x50mm", usd:390 },
+  { sku:"FC225", description:"Coffee Table, 83x33/52x43mm", usd:570 },
+  { sku:"FC226", description:"Coffee Table, 85x34/50x45mm", usd:523 },
+  { sku:"FC227", description:"Coffee Table, 100x30/50x40mm", usd:435 },
+  { sku:"LCAB26P", description:"Leisure Chair, Stainless Steel/Solid wood/Fabric, standard", usd:1110 },
+  { sku:"LCCD26P", description:"Leisure Chair, North American Oak/Plywood/Fabric, 820x780x720mm", usd:820 },
+  { sku:"LCEF26P", description:"Leisure Chair, North American Oak/Plywood/Fabric, 1000x1010x750mm", usd:1110 },
+  { sku:"LCGJ26P", description:"Leisure Chair, North American Oak/Plywood/Fabric, 750x670x650mm", usd:710 },
+  { sku:"LCHM26P", description:"Leisure Chair, North American Oak/High density Foam/Fabric, 1000x850x820mm", usd:1990 },
+  { sku:"LCKL26P", description:"Leisure Chair (change size), North American Oak/Plywood/Fabric", usd:530 },
+  { sku:"LCMN26P", description:"Leisure Chair, North American Oak/High density Foam/Fabric, 900x930x740mm", usd:1055 },
+  { sku:"LCPQ26P", description:"Leisure Chair, Metal/High density foam/microfiber, 570x600x820mm", usd:435 },
+  { sku:"LCRS26P", description:"Leisure Chair, Solid wood/High density foam/Fabric, 820x720x820mm", usd:1120 },
+  { sku:"LCTV26P", description:"Leisure Chair, Solid wood/High density foam/Fabric, 720x720x780mm", usd:570 },
+  { sku:"LSAB26P", description:"Leisure Chair+Stool, Plywood/High density foam/Fabric, Champagne Gold, standard", usd:1660 },
+  { sku:"M1868", description:"Decorative mirror, ss pvd+brass decor, dia1050mm", usd:1706 },
+  { sku:"M2301", description:"Decorative mirror, ss pvd+gold plating, dia1000mm", usd:1254 },
+  { sku:"M484#", description:"1 Seat, Full Leather, Granite/Taupe/Camel, 915x990x1000mm", usd:1020 },
+  { sku:"M537#", description:"4 Seat, Full Leather, 019#/Granite, 2950x1000x915mm", usd:2370 },
+  { sku:"M570#", description:"4 Seat, Full Leather, RX-174/Green, 2885x1090x750mm", usd:2700 },
+  { sku:"M630", description:"5 Seat+Console, Full Leather, Granite/Taupe, 5220x1050x825mm", usd:4851 },
+  { sku:"M630P2", description:"1 Seat Sofa, Full Leather, Granite/Green, 1250x1050x825mm", usd:1254 },
+  { sku:"M681#", description:"4 Seat, Full Leather, L40713, 3120x1090x930mm", usd:2895 },
+  { sku:"NSAB26P", description:"Night Stand, MDF/Solid wood, 580x405x665mm", usd:480 },
+  { sku:"NSCD26P", description:"Night Stand, MDF/Solid wood, standard", usd:565 },
+  { sku:"OTAB26P", description:"Ottoman, MDF/Solid wood, standard", usd:710 },
+  { sku:"PIANO SOFA", description:"2 Seat, Leather, T Cream/Olive Green, 2500x1000x660mm", usd:5115 },
+  { sku:"SA2016", description:"Mirror, 5mm mirror/Iron coated TK23, 2000x900x95mm", usd:765 },
+  { sku:"SA2031", description:"5mm mirror, 201# stainless steel plated mirror black", usd:426 },
+  { sku:"SA2320L", description:"Vase (large), Iron powder coated TK05, dia500x650mm", usd:534 },
+  { sku:"SA2320S", description:"Vase (small), Iron powder coated TK27, dia500x500mm", usd:504 },
+  { sku:"SA2322", description:"Vase, Iron powder coated TK13+TK01, 430x380x650mm", usd:555 },
+  { sku:"SA2610", description:"Bar cart, 8mm black glass/201# stainless steel plated bronze, 750x444x850mm", usd:642 },
+  { sku:"SA2830", description:"Cabinet, Iron Powder/Red Oak Cabinet/LED light/8mm Grey Glass, 1160x490x1590mm", usd:2220 },
+  { sku:"SA2834", description:"Shelf, 8mm clear glass/Iron powder coated TK14+TK23, 1000x300x1900mm", usd:1005 },
+  { sku:"SA2841S", description:"Shelf, 8mm clear glass/Iron powder coated TK23, dia450x1800mm", usd:990 },
+  { sku:"SA549", description:"Mirror, 5mm mirror/iron powder coated TK08, swivel double mirror, 800x550x1915mm", usd:894 },
+  { sku:"SCAB26P", description:"Side cabinet (边柜), ss pvd+brass decor+black pvd, 2400x490x710mm", usd:6957 },
+  { sku:"SDAB26P", description:"Side table (边几), ss pvd+gold plating, dia500x500mm", usd:730 },
+  { sku:"SFAB26P", description:"Sofa with Natural marble, North American Oak/microfibre/marble, 3500x980x790mm", usd:3900 },
+  { sku:"SFCD26P", description:"Sofa, North American Oak/Plywood/Fabric, 3500x1100x730mm", usd:3225 },
+  { sku:"SJ308", description:"Coffee Table, 120x70/50x50mm", usd:487 },
+  { sku:"SJ310", description:"Coffee Table, 90x31/55x60x38mm", usd:835 },
+  { sku:"SJ311", description:"Coffee Table, 90x31/47x46mm", usd:755 },
+  { sku:"SJ312", description:"Coffee Table, 110x90/90x42mm", usd:642 },
+  { sku:"SJ314", description:"Coffee Table, 95x33/50x45mm", usd:745 },
+  { sku:"SJ315", description:"Coffee Table, 100x80/45x46mm", usd:655 },
+  { sku:"SNAIL SOFA", description:"Half L Sofa, Leather Metal, Brown, 4100x1000x650mm", usd:5115 },
+  { sku:"STAB26P", description:"Stool, North American Oak/Fabric, 1400x520x430mm", usd:1050 },
+  { sku:"T301", description:"L Shape Sofa, Leather, T Cream/Olive Green, 4200x3000x660mm", usd:7530 },
+  { sku:"T302", description:"2 Seat, Leather, T Cream/Olive Green, 2500x1000x660mm", usd:3700 },
+  { sku:"T303", description:"Leisure Chair, Leather Metal, Olive Green, 830x710x780mm", usd:1100 },
+  { sku:"T304", description:"L Corner Sofa, Leather Metal, Beige, 3500x1050x860mm", usd:4665 },
+  { sku:"T305", description:"Half L Sofa, Leather Metal, Brown, 4100x1000x650mm", usd:6360 },
+  { sku:"T306", description:"4 Seater Sofa, Leather Metal, Taupe, 3360x1000x730mm", usd:8993 },
+  { sku:"T307", description:"2 Seater Sofa, Leather Metal, Taupe, 2330x1000x730mm", usd:6359 },
+  { sku:"T308", description:"Leisure Chair, Fabric, Textured, 780x750x810mm", usd:2614 },
+  { sku:"TTAB26P", description:"Tea Table, North American Oak/Plywood, 2600x1000x750mm", usd:2560 },
+  { sku:"TTCD26P", description:"Tea Table, dark walnut, North American Oak/Plywood, 2400x1000x750mm", usd:2560 },
+  { sku:"TX401", description:"Table, 88x88/45x45mm", usd:1874 },
+  { sku:"TX402", description:"Table, 130x130x75mm", usd:2206 },
+  { sku:"YB2423", description:"Side Table, 90x70/70x50mm", usd:690 },
+  { sku:"YB2521", description:"Side Table, 110x110x28mm", usd:960 },
+  { sku:"YB2523", description:"Side Table, 100x100/60x60mm", usd:710 },
+  { sku:"YB2524", description:"Side Table, 90x90/40x50mm", usd:730 },
+  { sku:"YB2530", description:"Side Table, 90x90/50x50mm", usd:700 },
+  { sku:"YBSS01", description:"Side Table, 80x80/80x50mm", usd:570 },
+  { sku:"YBSS06", description:"Side Table, 120x70/52x52mm", usd:600 }
+];
+
+const PENDING_SEED = [];
+
+let items = [];
+let pending = [];
+let skippedLog = [];
+
+function fmtINR(n){
+  if(n === null || n === undefined || isNaN(n)) return "—";
+  return "₹" + Math.round(n).toLocaleString('en-IN');
+}
+
+// Works both inside a Claude.ai artifact (window.storage) and as a plain
+// static page, e.g. hosted on Netlify (falls back to localStorage).
+const hasClaudeStorage = (typeof window !== 'undefined') && window.storage && typeof window.storage.get === 'function';
+
+async function safeGet(key){
+  if(hasClaudeStorage){
+    try{
+      const res = await window.storage.get(key, false);
+      return res && res.value ? JSON.parse(res.value) : null;
+    }catch(e){ return null; }
+  }else{
+    try{
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : null;
+    }catch(e){ return null; }
+  }
+}
+async function safeSet(key, value){
+  if(hasClaudeStorage){
+    try{ await window.storage.set(key, JSON.stringify(value), false); }catch(e){}
+  }else{
+    try{ localStorage.setItem(key, JSON.stringify(value)); }catch(e){}
+  }
+}
+
+function mergeBatch(newRows, source){
+  let added = 0, variantsAdded = 0, duplicatesSkipped = 0;
+  newRows.forEach(row=>{
+    const exactMatch = items.find(it =>
+      it.sku.toUpperCase() === row.sku.toUpperCase() &&
+      it.usd === row.usd &&
+      it.description.trim().toLowerCase() === row.description.trim().toLowerCase()
+    );
+    if(exactMatch){
+      skippedLog.push({ sku: row.sku, description: row.description, usd: row.usd, reason: "identical SKU, price and description already in ledger", source });
+      duplicatesSkipped++;
+    }else{
+      const sameSku = items.some(it => it.sku.toUpperCase() === row.sku.toUpperCase());
+      items.push(row);
+      added++;
+      if(sameSku) variantsAdded++;
+    }
+  });
+  return { added, variantsAdded, duplicatesSkipped };
+}
+
+async function loadAll(){
+  const storedItems = await safeGet(STORE_KEY);
+  items = storedItems || ITEMS_SEED.slice();
+
+  const storedRate = await safeGet(RATE_KEY);
+  if(storedRate){ RATE = storedRate.rate; RATE_DATE = storedRate.date; }
+
+  const storedSkipped = await safeGet(SKIPPED_KEY);
+  skippedLog = storedSkipped || [];
+
+  const storedPending = await safeGet(PENDING_KEY);
+  pending = storedPending || PENDING_SEED.slice();
+
+  renderRate();
+  renderLedger();
+  renderPending();
+  renderDupLog();
+}
+
+function renderRate(){
+  document.getElementById('rateDisplay').textContent = "₹" + RATE.toFixed(2);
+  document.getElementById('rateDate').textContent = RATE_DATE;
+}
+
+function renderLedger(){
+  document.getElementById('itemCount').textContent = items.length + (items.length===1 ? " item" : " items");
+  document.getElementById('ledgerCount').textContent = "(" + items.length + ")";
+  const body = document.getElementById('ledgerBody');
+  body.innerHTML = "";
+  items.slice().sort((a,b)=>a.sku.localeCompare(b.sku)).forEach(it=>{
+    const tr = document.createElement('tr');
+    const hasPrice = typeof it.usd === 'number';
+    const usdText = hasPrice ? "$" + it.usd : "— <span style=\"color:var(--stamp)\">needs price</span>";
+    const inrText = hasPrice ? fmtINR(it.usd*RATE) : "—";
+    tr.innerHTML = `<td>${it.sku}</td><td class="desc-cell">${it.description}</td><td>${usdText}</td><td class="inr">${inrText}</td>`;
+    body.appendChild(tr);
+  });
+}
+
+function renderDupLog(){
+  const box = document.getElementById('dupLog');
+  const list = document.getElementById('dupLogList');
+  if(!skippedLog.length){ box.classList.remove('show'); return; }
+  list.innerHTML = skippedLog.map(s=>`<div class="frow">• ${s.sku} — "${s.description}" ($${s.usd}) skipped, ${s.reason}</div>`).join("");
+  box.classList.add('show');
+}
+
+function renderPending(){
+  document.getElementById('pendingCount').textContent = "(" + pending.length + ")";
+  const body = document.getElementById('pendingBody');
+  body.innerHTML = "";
+  if(!pending.length){
+    document.getElementById('pendingWrap').style.display = 'none';
+    return;
+  }
+  document.getElementById('pendingWrap').style.display = '';
+  pending.forEach((p, idx)=>{
+    const tr = document.createElement('tr');
+    tr.className = 'pending-row';
+    tr.innerHTML = `<td class="desc-cell">${p.description}</td><td>$${p.usd}</td>
+      <td><input type="text" placeholder="e.g. LC-041" data-idx="${idx}"><button data-idx="${idx}">Save</button><span class="pstatus" id="pstatus-${idx}"></span></td>`;
+    body.appendChild(tr);
+  });
+  body.querySelectorAll('button').forEach(btn=>{
+    btn.addEventListener('click', async ()=>{
+      const idx = parseInt(btn.getAttribute('data-idx'));
+      const input = body.querySelector(`input[data-idx="${idx}"]`);
+      const sku = input.value.trim();
+      const statusEl = document.getElementById('pstatus-' + idx);
+      if(!sku){ statusEl.textContent = "enter a SKU"; return; }
+      const item = pending[idx];
+      const exactMatch = items.find(it => it.sku.toUpperCase() === sku.toUpperCase() && it.usd === item.usd);
+      if(exactMatch){
+        statusEl.textContent = "identical SKU + price already exists";
+        return;
+      }
+      const isVariant = items.some(it => it.sku.toUpperCase() === sku.toUpperCase());
+      items.push({ sku, description: item.description, usd: item.usd });
+      if(isVariant) statusEl.textContent = "added as variant";
+      pending.splice(idx, 1);
+      await safeSet(STORE_KEY, items);
+      await safeSet(PENDING_KEY, pending);
+      renderLedger();
+      renderPending();
+    });
+  });
+}
+
+function showResult(matches){
+  document.getElementById('resultCard').classList.add('show');
+  document.getElementById('emptyState').classList.remove('show');
+  document.getElementById('rSku').textContent = matches[0].sku;
+  const body = document.getElementById('resultBody');
+
+  function priceBlock(item, small){
+    if(typeof item.usd !== 'number'){
+      return `<div class="price-row"><div class="usd-price" style="color:var(--stamp)">No price entered yet for this SKU</div></div>`;
+    }
+    return `<div class="price-row">
+        <div class="usd-price">$${item.usd} USD</div>
+        <div class="stamp${small ? ' stamp-sm' : ''}"><small>PRICE</small>${fmtINR(item.usd*RATE)}</div>
+      </div>`;
+  }
+
+  if(matches.length === 1){
+    const item = matches[0];
+    body.innerHTML = `<div class="desc">${item.description}</div>` + priceBlock(item, false);
+  }else{
+    body.innerHTML = `<div class="variant-note">${matches.length} variants found for this SKU — price differs by combination/colour</div>` +
+      matches.map(item=>`
+        <div class="variant-item">
+          <div class="desc">${item.description}</div>
+          ${priceBlock(item, true)}
+        </div>`).join("");
+  }
+}
+function hideResult(){ document.getElementById('resultCard').classList.remove('show'); }
+function showEmpty(){
+  document.getElementById('emptyState').classList.add('show');
+  document.getElementById('resultCard').classList.remove('show');
+}
+function hideEmpty(){ document.getElementById('emptyState').classList.remove('show'); }
+
+document.getElementById('searchInput').addEventListener('input', (e)=>{
+  const q = e.target.value.trim().toUpperCase();
+  if(!q){ hideResult(); hideEmpty(); return; }
+  const matches = items.filter(it => it.sku.toUpperCase() === q);
+  if(matches.length){ showResult(matches); }
+  else{ showEmpty(); }
+});
+
+document.getElementById('refreshRate').addEventListener('click', async ()=>{
+  const val = prompt("Enter today's USD to INR rate (e.g. 95.40):", RATE.toFixed(2));
+  if(val && !isNaN(parseFloat(val))){
+    RATE = parseFloat(val);
+    RATE_DATE = new Date().toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+    renderRate();
+    renderLedger();
+    const q = document.getElementById('searchInput').value.trim().toUpperCase();
+    const matches = items.filter(it => it.sku.toUpperCase() === q);
+    if(matches.length) showResult(matches);
+    await safeSet(RATE_KEY, {rate:RATE, date:RATE_DATE});
+  }
+});
+
+document.getElementById('addBtn').addEventListener('click', async ()=>{
+  const raw = document.getElementById('bulkInput').value.trim();
+  const statusEl = document.getElementById('addStatus');
+  if(!raw){ statusEl.textContent = "Nothing to add."; return; }
+
+  const lines = raw.split('\n').map(l=>l.trim()).filter(Boolean);
+  const rows = [];
+  lines.forEach(line=>{
+    const parts = line.split(',').map(p=>p.trim());
+    if(parts.length < 2) return;
+    const sku = parts[0];
+    if(!sku) return;
+    let usd = null;
+    let description;
+    const lastRaw = parts[parts.length-1];
+    const lastNum = parseFloat(lastRaw.replace(/[^0-9.]/g,''));
+    if(parts.length >= 3 && !isNaN(lastNum) && lastRaw !== ''){
+      usd = lastNum;
+      description = parts.slice(1, -1).join(', ');
+    }else{
+      description = parts.slice(1).join(', ');
+    }
+    rows.push({ sku, description, usd });
+  });
+
+  const result = mergeBatch(rows, "manual entry");
+
+  await safeSet(STORE_KEY, items);
+  await safeSet(SKIPPED_KEY, skippedLog);
+  renderLedger();
+  renderDupLog();
+  let msg = `${result.added} added`;
+  if(result.variantsAdded) msg += ` (${result.variantsAdded} as new variants of an existing SKU)`;
+  msg += ".";
+  if(result.duplicatesSkipped) msg += ` ${result.duplicatesSkipped} skipped — identical SKU and price already in the ledger.`;
+  statusEl.textContent = msg;
+  document.getElementById('bulkInput').value = "";
+});
+
+loadAll();
+</script>
+</body>
+</html>
