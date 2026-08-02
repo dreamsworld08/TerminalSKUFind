@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <style>
   :root{
     --paper:#F5F1E7;
@@ -122,6 +123,29 @@
     padding-right:16px;
     white-space:nowrap;
   }
+  #scanBtn{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    width:52px;
+    flex-shrink:0;
+    background:var(--ink);
+    color:var(--paper);
+    border:none;
+    border-left:2px solid var(--ink);
+    cursor:pointer;
+  }
+  #scanBtn:hover{ background:#000; }
+  #scanBtn.scanning{ background:var(--stamp); }
+  #scanBtn svg{ display:block; }
+  .scan-status{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px;
+    color:var(--stamp);
+    margin-top:8px;
+    display:none;
+  }
+  .scan-status.show{ display:block; }
 
   .result{
     margin-top:22px;
@@ -436,8 +460,16 @@
   <div class="ledger-label">Find price by SKU</div>
   <div class="search-row">
     <input id="searchInput" type="text" placeholder="Enter SKU — e.g. ES2405" autocomplete="off" spellcheck="false">
+    <button id="scanBtn" type="button" title="Scan SKU with camera" aria-label="Scan SKU with camera">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M4 8V6a2 2 0 0 1 2-2h2M4 16v2a2 2 0 0 0 2 2h2M20 8V6a2 2 0 0 0-2-2h-2M20 16v2a2 2 0 0 1-2 2h-2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        <circle cx="12" cy="12" r="3.4" stroke="currentColor" stroke-width="1.8"/>
+      </svg>
+    </button>
+    <input type="file" id="scanFileInput" accept="image/*" capture="environment" style="display:none">
     <div class="count" id="itemCount"></div>
   </div>
+  <div class="scan-status" id="scanStatus"></div>
 
   <div class="result" id="resultCard">
     <div class="sku" id="rSku"></div>
@@ -863,12 +895,17 @@ function showEmpty(){
 }
 function hideEmpty(){ document.getElementById('emptyState').classList.remove('show'); }
 
-document.getElementById('searchInput').addEventListener('input', (e)=>{
-  const q = e.target.value.trim().toUpperCase();
-  if(!q){ hideResult(); hideEmpty(); return; }
+function performSearch(rawQuery){
+  const q = rawQuery.trim().toUpperCase();
+  if(!q){ hideResult(); hideEmpty(); return []; }
   const matches = items.filter(it => it.sku.toUpperCase() === q);
   if(matches.length){ showResult(matches); }
   else{ showEmpty(); }
+  return matches;
+}
+
+document.getElementById('searchInput').addEventListener('input', (e)=>{
+  performSearch(e.target.value);
 });
 
 document.getElementById('refreshRate').addEventListener('click', async ()=>{
@@ -878,10 +915,74 @@ document.getElementById('refreshRate').addEventListener('click', async ()=>{
     RATE_DATE = new Date().toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
     renderRate();
     renderLedger();
-    const q = document.getElementById('searchInput').value.trim().toUpperCase();
-    const matches = items.filter(it => it.sku.toUpperCase() === q);
-    if(matches.length) showResult(matches);
+    performSearch(document.getElementById('searchInput').value);
     await safeSet(RATE_KEY, {rate:RATE, date:RATE_DATE});
+  }
+});
+
+// ===== OCR SKU scan =====
+function setScanStatus(msg, isError){
+  const el = document.getElementById('scanStatus');
+  if(!msg){ el.classList.remove('show'); el.textContent = ""; return; }
+  el.textContent = msg;
+  el.style.color = isError ? "var(--stamp)" : "var(--ink-soft)";
+  el.classList.add('show');
+}
+
+function cleanOcrToken(s){
+  return s.toUpperCase().replace(/[^A-Z0-9#\-]/g, '');
+}
+
+function findSkuInOcrText(rawText){
+  const knownSkus = [...new Set(items.map(it => it.sku.toUpperCase()))];
+  const collapsed = cleanOcrToken(rawText.replace(/\n/g, ' '));
+  // 1) exact token match (split on whitespace, clean each token)
+  const tokens = rawText.split(/\s+/).map(cleanOcrToken).filter(Boolean);
+  for(const t of tokens){
+    if(knownSkus.includes(t)) return t;
+  }
+  // 2) a known SKU appears as a substring once spaces/punctuation are stripped
+  //    (handles OCR splitting one SKU across a line break or inserting a stray space)
+  for(const sku of knownSkus){
+    if(collapsed.includes(sku)) return sku;
+  }
+  return null;
+}
+
+document.getElementById('scanBtn').addEventListener('click', ()=>{
+  if(typeof Tesseract === 'undefined'){
+    setScanStatus("OCR library failed to load — check your connection and try again.", true);
+    return;
+  }
+  document.getElementById('scanFileInput').click();
+});
+
+document.getElementById('scanFileInput').addEventListener('change', async (e)=>{
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+  const scanBtn = document.getElementById('scanBtn');
+  scanBtn.classList.add('scanning');
+  setScanStatus("Reading photo…", false);
+
+  try{
+    const { data: { text } } = await Tesseract.recognize(file, 'eng');
+    const matchedSku = findSkuInOcrText(text);
+
+    if(matchedSku){
+      document.getElementById('searchInput').value = matchedSku;
+      performSearch(matchedSku);
+      setScanStatus(`Matched SKU "${matchedSku}" from photo.`, false);
+    }else{
+      const guess = text.trim().split(/\s+/)[0] || "";
+      document.getElementById('searchInput').value = guess;
+      performSearch(guess);
+      setScanStatus(`Couldn't confidently match a SKU from the photo — edit the text in the search box if needed.`, true);
+    }
+  }catch(err){
+    setScanStatus("Couldn't read that photo — try again with a clearer, closer shot of the SKU.", true);
+  }finally{
+    scanBtn.classList.remove('scanning');
+    e.target.value = "";
   }
 });
 
