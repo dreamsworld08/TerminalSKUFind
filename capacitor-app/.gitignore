@@ -1,0 +1,11 @@
+# Ignore keystore and local signing properties
+/android/app/keystore.properties
+/android/app/keystore.jks
+
+# Capacitor / Android build outputs
+/android/.gradle
+/android/build
+/android/app/build
+
+# Node modules
+node_modules/
