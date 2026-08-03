@@ -244,14 +244,6 @@
   <div class="empty" id="emptyState">No SKU matching that entry in the ledger yet.</div>
   <div class="loading-note" id="loadingNote">Loading catalog…</div>
 
-  <div class="ledger-label" style="margin-top:32px;">Full ledger <span class="n" id="ledgerCount"></span></div>
-  <div class="scroll-table">
-    <table>
-      <thead><tr><th>SKU</th><th>Description</th><th>USD</th><th>INR</th></tr></thead>
-      <tbody id="ledgerBody"></tbody>
-    </table>
-  </div>
-
   <footer>
     Prices update from the live catalog. Rate is set by the store.
   </footer>
@@ -293,27 +285,11 @@ async function loadAll(){
     loadingNote.textContent = "Couldn't load the catalog — check your connection and refresh.";
   }
   renderRate();
-  renderLedger();
 }
 
 function renderRate(){
   document.getElementById('rateDisplay').textContent = "₹" + Number(RATE).toFixed(2);
   document.getElementById('rateDate').textContent = RATE_DATE;
-}
-
-function renderLedger(){
-  document.getElementById('itemCount').textContent = items.length + (items.length===1 ? " item" : " items");
-  document.getElementById('ledgerCount').textContent = "(" + items.length + ")";
-  const body = document.getElementById('ledgerBody');
-  body.innerHTML = "";
-  items.slice().sort((a,b)=>a.sku.localeCompare(b.sku)).forEach(it=>{
-    const tr = document.createElement('tr');
-    const hasPrice = typeof it.usd === 'number';
-    const usdText = hasPrice ? "$" + it.usd : "— <span style=\"color:var(--stamp)\">needs price</span>";
-    const inrText = hasPrice ? fmtINR(it.usd*RATE) : "—";
-    tr.innerHTML = `<td>${it.sku}</td><td class="desc-cell">${it.description}</td><td>${usdText}</td><td class="inr">${inrText}</td>`;
-    body.appendChild(tr);
-  });
 }
 
 function showResult(matches){
