@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">TerminalSKUFind</string>
+    <string name="title_activity_main">TerminalSKUFind</string>
+    <string name="package_name">com.dreamsworld.terminalskufind</string>
+    <string name="custom_url_scheme">com.dreamsworld.terminalskufind</string>
+</resources>

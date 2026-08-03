@@ -1,0 +1,1 @@
+Privacy policy: This app uses Supabase anonymized API key to fetch public product data. No user-identifying data is collected by default. For full policy, provide a URL to your hosted privacy policy.
