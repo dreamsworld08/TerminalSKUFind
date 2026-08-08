@@ -1,17 +1,18 @@
 # THE TERMINAL — SKU Ledger
 
-A small static SKU lookup web app used to search The Terminal's furniture catalog by SKU or model number and show USD prices converted to INR at a configurable rate. The repository includes two static pages:
+Internal price-lookup tool for The Terminal (luxury designer furniture, hybrid offline+online). Staff/customers search a SKU and get the price converted to INR. The admin panel also supports adding new SKUs, backfilling structured size/material data, and finding catalog items that fit a client's room or target furniture size.
 
-- `index.html` — customer/staff-facing SKU search and ledger view
-- `admin.html` — a UI-only admin panel for adding SKUs, assigning pending items, updating the USD→INR rate, and viewing simple analytics
+- `index.html` — public/staff-facing SKU search and ledger view
+- `admin.html` — passcode-gated admin panel: SKU management, USD→INR rate, search analytics, dimension/material data tools, and the Furniture Finder
 
-Both pages use a Supabase project (client-side) for storage and analytics.
+Both pages are static, no build step, and talk directly to a Supabase project (client-side) for storage and analytics.
 
 ## Stack
 
 - Language: Plain HTML with embedded JavaScript and CSS
-- Runtime: Static site (browser)
-- Libraries: @supabase/supabase-js (CDN), Google Fonts
+- Runtime: Static site (browser) — deployed via GitHub Pages
+- Backend: Supabase (Postgres + auto REST API)
+- Libraries: @supabase/supabase-js, PapaParse (both via CDN)
 
 ## Quick start (local)
 
@@ -26,68 +27,59 @@ Both pages use a Supabase project (client-side) for storage and analytics.
 2. Open the app in your browser:
 
    - http://localhost:8000/index.html  (lookup UI)
-   - http://localhost:8000/admin.html  (admin UI)
+   - http://localhost:8000/admin.html  (admin UI, passcode-gated)
 
-Note: the pages expect a Supabase project configured at the URL and anon key embedded in the HTML files. If you want to run using your own Supabase instance, update the SUPABASE_URL and SUPABASE_ANON_KEY constants in both `index.html` and `admin.html`.
+Note: the pages expect a Supabase project configured at the URL and anon key embedded in the HTML files (`SUPABASE_URL` / `SUPABASE_ANON_KEY`). To run against your own Supabase instance, update those constants in both `index.html` and `admin.html`, then run `migration_furniture_finder.sql` once in the Supabase SQL Editor.
 
-## Supabase schema (example)
+## Database schema
 
-Create tables/views used by the app. Run these in your Supabase SQL editor (adapt types as needed):
+A single flat `items` table — there is no products/variants split. Each row is one SKU variant.
 
-```sql
--- Core ledger
-CREATE TABLE items (
-  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  sku text NOT NULL,
-  description text NOT NULL,
-  usd numeric
-);
+- `id, sku, description, usd, created_at` — the original columns. **`sku` is intentionally NOT unique**: multiple rows can share a SKU for different colors/configs (same physical supplier tag). `description` is free text and is the ultimate source of truth (e.g. `"3 Seat+L.A.F. Chaise, Leather, L.Blue, 2760x1760x820mm"`).
+- `length_mm, width_mm, height_mm, diameter_mm` — structured footprint, canonical unit mm. `diameter_mm` is set (and mirrored into length/width) for round items.
+- `dimension_sets` (jsonb) — for multi-part/combo items, the individual `{length_mm,width_mm,height_mm}` per part. `length_mm`/`width_mm`/`height_mm` on the row itself hold the envelope max across parts, not a true combined footprint — the UI always flags these for manual verification rather than treating them as reliable.
+- `dimension_parse_status` — `parsed` | `round` | `multi_part` | `ambiguous` | `no_dims`. `dimension_raw` keeps the matched substring for audit.
+- `material, color, texture` — structured, split out of `description`. `material_review_status` (`pending`/`reviewed`) tracks whether a human has confirmed the split, since the source text mixes material and finish/pattern codes together (e.g. `"Fabric ANTHOLOGY-1/iron powder coated TK23"`) and only a human can judge supplier shorthand reliably.
 
--- Items that were imported without SKU (admin assigns SKU later)
-CREATE TABLE pending_items (
-  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  description text NOT NULL,
-  usd numeric
-);
+Other tables: `pending_items` (description + price, awaiting SKU assignment), `settings` (key/value, currently just `usd_inr_rate` as JSON), `search_log` (one row per successful SKU search from `index.html`), and `search_counts` (a view aggregating `search_log`, powers the admin analytics).
 
--- Key/value settings (usd_inr_rate stored as JSON)
-CREATE TABLE settings (
-  key text PRIMARY KEY,
-  value jsonb
-);
+The full migration (additive, nullable columns only) is in `migration_furniture_finder.sql`.
 
--- Search analytics log (written from client as fire-and-forget)
-CREATE TABLE search_log (
-  id bigserial PRIMARY KEY,
-  sku text,
-  created_at timestamptz DEFAULT now()
-);
+## admin.html features
 
--- Simple aggregated view used by the admin UI
-CREATE VIEW search_counts AS
-  SELECT sku, COUNT(*) AS search_count
-  FROM search_log
-  GROUP BY sku
-  ORDER BY search_count DESC;
-```
+- **Passcode gate**: hardcoded client-side passcode. **UI-only lock, not real auth** — anyone with the Supabase URL + anon key could bypass it via direct API calls. Fine for an internal tool; upgrade to Supabase Auth if that becomes a real concern.
+- **Add a new SKU**: SKU, description, price, plus optional structured Length/Width/Height (with a mm/in/ft unit selector), diameter, material, color, and texture.
+- **Needs a SKU**: assign a SKU to a pending item.
+- **Full ledger**: browse/delete existing items.
+- **Data tools — dimensions & materials**:
+  - *Parse dimensions from descriptions*: regex-backfills `length_mm`/`width_mm`/`height_mm`/`diameter_mm`/`dimension_sets` from each item's `description`. Mechanical and safe to re-run.
+  - *Export material/color/texture review CSV*: downloads a CSV with best-guess material/color/texture per item (parsed from `description`), flagging low-confidence rows as `REVIEW`. Nothing is written to the database at this step.
+  - *Import corrected CSV*: re-upload the reviewed CSV to write `material`/`color`/`texture` back to the DB, matched by row `id` (never by `sku`, since SKU isn't unique).
+- **Furniture Finder**: given a client's room size or a target furniture size — entered in mm, inches, or feet (including `8'6"` notation) — lists catalog items that fit, with material/texture filters (e.g. exclude leather). Room mode checks footprint against (room size − a configurable clearance margin); furniture mode matches within a configurable tolerance %. Both allow the piece to be rotated 90°. Multi-part/combo items are always shown with a "verify manually" flag rather than silently included or excluded.
+- **Analytics**: total searches, distinct SKUs searched, ranked bar list of most-searched SKUs (from `search_counts`).
 
-Insert an initial rate example:
+## Data history / key decisions
 
-```sql
-INSERT INTO settings (key, value) VALUES ('usd_inr_rate', '{"rate": 95.40, "date": "01 Aug 2026"}');
-```
+- Catalog was built from ~13 supplier PDFs (price lists, quotations, a proforma invoice). OCR was tried and abandoned as unreliable; extraction was done by reading each PDF directly.
+- Dedup rule: a row is only treated as an exact duplicate (dropped) if SKU **and** price **and** description all match. Same SKU with a different price/combo/color is kept as a separate variant — a deliberate decision so real product variants are never silently dropped.
+- 35 items that arrived with no SKU were assigned SKUs using the scheme `[2-letter category code][2 random letters][26][P]` (e.g. `LCHM26P` = Leisure Chair, random pair, 2026, 1 piece). Category codes: LC=Leisure Chair, LS=Leisure Chair+Stool, SF=Sofa, ST=Stool, TT=Tea Table, CH=Chair/Dining Chair, BD=Bed, NS=Night Stand, OT=Ottoman, CB=Cabinet, SC=Side Cabinet, SD=Side Table, CT=Console/Entryway Table, CC=Combo Coffee Table.
+- Current catalog size: 185 rows in `items`.
 
-## Security notes
+## Known gaps / possible next steps
 
-- The app includes the Supabase anon key and an admin passcode directly in client HTML. The anon key allows unauthenticated access to the Supabase API according to the project's Row Level Security (RLS) rules — review and tighten RLS policies before exposing this in production.
-- The `admin.html` passcode is a UI-only gate and provides no real security. For production use, move admin actions to a server or require authenticated users with appropriate RLS policies.
+- Exchange rate is manual, not a live feed.
+- No real authentication on admin.html (see caveat above).
+- No product images.
+- `length_mm`/`width_mm`/`height_mm`/`material`/`color`/`texture` are only populated once the Data Tools backfill + CSV review has been run against the live catalog — until then the Furniture Finder has nothing to search over.
+- Multi-part/combo item dimensions are an envelope max, not a true combined footprint — always double-check these against `dimension_sets` before recommending to a client.
+- Mobile responsiveness and predictive search (4+ chars) are already implemented in index.html.
+- Logo is embedded as a base64 PNG (white background removed) in both HTML files; also used as favicon.
+- Consider tightening RLS policies and moving admin actions server-side before treating this as more than an internal tool.
 
-## Suggestions / next steps
+## Reference files
 
-- Add a small README (this file) — done.
-- Add `supabase_setup.sql` to the repo (I can create it if you want).
-- Consider removing embedded secrets/passcode and implementing server-side protections or proper RLS rules in Supabase.
-- Add a GitHub Pages/Netlify deployment config if you want hosted static pages.
+- `migration_furniture_finder.sql` — additive schema migration (dimensions + material/color/texture columns), run once
+- `THE_TERMINAL_SKU_Tag_Sheet.pdf` — printable checklist for physically tagging products
 
 ## License
 
