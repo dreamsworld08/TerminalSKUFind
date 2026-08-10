@@ -131,6 +131,14 @@
 
   .empty-note{ font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--ink-soft); }
 
+  /* Dashboard cards */
+  .dashboard{ display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:12px; margin-bottom:18px; }
+  .card-btn{ background:#FFF; border:1px solid var(--line); padding:14px; text-align:left; cursor:pointer; border-radius:8px; display:flex; flex-direction:column; gap:6px; transition:box-shadow .12s ease; }
+  .card-btn:hover{ box-shadow:0 6px 18px rgba(0,0,0,0.06); }
+  .card-btn .title{ font-weight:700; font-size:15px; color:var(--ink); }
+  .card-btn .sub{ font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--ink-soft); }
+  .card-btn .count{ margin-top:auto; font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--ink-soft); text-align:right; }
+
   details{ margin-top:10px; }
   summary{
     font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:0.08em;
@@ -179,6 +187,15 @@
       <div class="stat"><div class="num" id="statTotal">—</div><div class="lbl">Total searches logged</div></div>
       <div class="stat"><div class="num" id="statUnique">—</div><div class="lbl">Distinct SKUs searched</div></div>
     </div>
+    <div class="dashboard" id="adminDashboard">
+      <button class="card-btn" id="cardRate"><span class="title">Update USD ↔ INR rate</span><span class="sub">Quickly set exchange rate</span></button>
+      <button class="card-btn" id="cardAddSku"><span class="title">Add new SKU</span><span class="sub">Create SKU & price</span></button>
+      <button class="card-btn" id="cardFurniture"><span class="title">Furniture finder</span><span class="sub">Open furniture search</span></button>
+      <button class="card-btn" id="cardLedger"><span class="title">Full ledger <span id="cardLedgerCount">(—)</span></span><span class="sub">View all SKUs</span></button>
+      <button class="card-btn" id="cardTopSearches"><span class="title">Most searched products</span><span class="sub">View top searches</span></button>
+      <button class="card-btn" id="cardAnalytics"><span class="title">Analytics</span><span class="sub">Search counts & stats</span></button>
+    </div>
+
     <div class="section-label">Most searched products</div>
     <div class="card" id="topSearchesCard">
       <div class="empty-note">Loading…</div>
@@ -419,6 +436,35 @@ document.getElementById('addSkuBtn').addEventListener('click', async ()=>{
   document.getElementById('newPrice').value = "";
   await loadItems();
 });
+
+// Dashboard navigation helpers
+function gotoSection(selector){
+  const el = document.querySelector(selector);
+  if(!el){ alert('Section not found.'); return; }
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Wire dashboard buttons to sections
+document.getElementById('cardRate')?.addEventListener('click', ()=> gotoSection('#newRateInput'));
+document.getElementById('cardAddSku')?.addEventListener('click', ()=> gotoSection('#newSku'));
+// Furniture finder uses existing search counts / top searches as an entry point
+document.getElementById('cardFurniture')?.addEventListener('click', ()=> gotoSection('#topSearchesCard'));
+document.getElementById('cardLedger')?.addEventListener('click', ()=> gotoSection('#ledgerBody'));
+document.getElementById('cardTopSearches')?.addEventListener('click', ()=> gotoSection('#topSearchesCard'));
+document.getElementById('cardAnalytics')?.addEventListener('click', ()=> gotoSection('#statTotal'));
+
+function refreshDashboardCounts(){
+  const el = document.getElementById('cardLedgerCount');
+  if(el) el.textContent = '(' + (items.length || 0) + ')';
+}
+
+// Wrap loadAll to update dashboard counts after data load
+const _origLoadAll = loadAll;
+loadAll = async function(){
+  await _origLoadAll();
+  refreshDashboardCounts();
+};
+
 </script>
 </body>
 </html>
