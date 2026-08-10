@@ -10,6 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5/papaparse.min.js"></script>
 <style>
   :root{
     --paper:#F5F1E7;
@@ -75,11 +76,20 @@
   .card{ border:1px solid var(--line); background:#FFFEFA; padding:20px; }
 
   label{ font-family:'IBM Plex Mono', monospace; font-size:10.5px; color:var(--ink-soft); display:block; margin-bottom:4px; }
-  input[type=text], input[type=number], textarea{
+  input[type=text], input[type=number], textarea, select{
     width:100%; font-family:'IBM Plex Mono', monospace; font-size:13px;
     border:1px solid var(--line); background:#FFFEFA; padding:9px 10px; margin-bottom:12px;
   }
   .row3{ display:grid; grid-template-columns:1fr 2fr 1fr; gap:12px; }
+  .row3-even{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; }
+  .toggle-btn{
+    font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:0.06em;
+    text-transform:uppercase; background:none; color:var(--ink-soft);
+    border:1px solid var(--line); padding:9px 16px; cursor:pointer;
+  }
+  .toggle-btn.active{ background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  .checkbox-filter{ display:inline-flex; align-items:center; gap:6px; margin:0 16px 8px 0; font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--ink); }
+  .checkbox-filter input{ width:auto; margin:0; }
   button.primary{
     font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:0.06em;
     text-transform:uppercase; background:var(--ink); color:var(--paper);
@@ -130,6 +140,7 @@
   .bar-count{ font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--ink-soft); width:80px; text-align:right; flex-shrink:0; }
 
   .empty-note{ font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--ink-soft); }
+  .note{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--ink-soft); line-height:1.6; }
 
   /* Dashboard cards */
   .dashboard{ display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:12px; margin-bottom:18px; }
@@ -220,6 +231,23 @@
         <div><label>Description</label><input type="text" id="newDesc" placeholder="e.g. Leisure Chair, Fabric, 800x700x750mm"></div>
         <div><label>Price (USD)</label><input type="text" id="newPrice" placeholder="e.g. 950 (leave blank if unknown)"></div>
       </div>
+      <div class="row3-even">
+        <div><label>Length</label><input type="text" id="newLength" placeholder="e.g. 2760 or 9ft (optional)"></div>
+        <div><label>Width</label><input type="text" id="newWidth" placeholder="e.g. 1760 (optional)"></div>
+        <div><label>Height</label><input type="text" id="newHeight" placeholder="e.g. 820 (optional)"></div>
+      </div>
+      <div class="row3-even">
+        <div><label>Unit (for bare numbers above)</label>
+          <select id="newDimUnit"><option value="mm" selected>mm</option><option value="in">in</option><option value="ft">ft</option></select>
+        </div>
+        <div><label>Diameter (round items only)</label><input type="text" id="newDiameter" placeholder="leave blank unless round"></div>
+        <div></div>
+      </div>
+      <div class="row3-even">
+        <div><label>Material</label><input type="text" id="newMaterial" placeholder="e.g. Leather (optional)"></div>
+        <div><label>Color</label><input type="text" id="newColor" placeholder="e.g. L.Blue (optional)"></div>
+        <div><label>Texture / finish</label><input type="text" id="newTexture" placeholder="e.g. iron powder coated (optional)"></div>
+      </div>
       <button class="primary" id="addSkuBtn">Add to ledger</button>
       <span class="status" id="addStatus"></span>
     </div>
@@ -245,6 +273,82 @@
     </div>
   </section>
 
+  <section>
+    <div class="section-label">Data tools — dimensions &amp; materials</div>
+    <div class="card">
+      <div style="margin-bottom:14px;">
+        <button class="primary" id="parseDimsBtn">Parse dimensions from descriptions</button>
+        <label style="display:inline-block; margin-left:14px;"><input type="checkbox" id="forceReparse" style="width:auto; margin:0 6px 0 0; vertical-align:middle;">Force re-parse all</label>
+        <span class="status" id="parseDimsStatus"></span>
+      </div>
+      <div id="parseDimsSummary" style="font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--ink-soft);"></div>
+    </div>
+    <div class="card" style="margin-top:14px;">
+      <div>
+        <button class="primary" id="exportCsvBtn">Export material/color/texture review CSV</button>
+        <span class="status" id="exportCsvStatus"></span>
+      </div>
+      <div class="note" style="margin-top:10px;">Downloads a CSV with best-guess material/color/texture per item, parsed from each description. Edit the <code>*_final</code> columns (rows flagged <code>REVIEW</code> need the most attention), then re-import below. Nothing is written to the database until you import.</div>
+    </div>
+    <div class="card" style="margin-top:14px;">
+      <div>
+        <label>Import corrected CSV</label>
+        <input type="file" id="importCsvInput" accept=".csv">
+        <button class="primary" id="importCsvBtn">Import corrected CSV</button>
+      </div>
+      <span class="status" id="importCsvStatus"></span>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-label">Furniture finder</div>
+    <div class="card">
+      <div style="margin-bottom:14px;">
+        <button class="toggle-btn active" id="modeRoomBtn">Room size</button>
+        <button class="toggle-btn" id="modeFurnitureBtn">Furniture size</button>
+        <span style="display:inline-block; margin-left:24px; vertical-align:middle; width:120px;">
+          <label style="margin-bottom:2px;">Unit</label>
+          <select id="finderUnit"><option value="ft" selected>ft</option><option value="in">in</option><option value="mm">mm</option></select>
+        </span>
+      </div>
+
+      <div id="roomModeInputs" class="row3-even">
+        <div><label>Room length</label><input type="text" id="roomLength" placeholder="e.g. 12ft or 8'6&quot;"></div>
+        <div><label>Room width</label><input type="text" id="roomWidth" placeholder="e.g. 10ft"></div>
+        <div><label>Clearance margin</label><input type="text" id="roomClearance" placeholder="e.g. 2ft" value="2ft"></div>
+      </div>
+
+      <div id="furnitureModeInputs" class="row3-even" style="display:none;">
+        <div><label>Target length</label><input type="text" id="targetLength" placeholder="e.g. 6ft"></div>
+        <div><label>Target width</label><input type="text" id="targetWidth" placeholder="e.g. 3ft"></div>
+        <div><label>Target height</label><input type="text" id="targetHeight" placeholder="optional"></div>
+      </div>
+      <div id="toleranceRow" class="row3-even" style="display:none;">
+        <div><label>Tolerance (%)</label><input type="text" id="targetTolerance" value="10"></div>
+        <div></div>
+        <div></div>
+      </div>
+
+      <div class="section-label" style="margin-top:8px;">Filters</div>
+      <div id="materialFilterWrap" style="margin-bottom:6px;"></div>
+      <div class="row3-even">
+        <div><label>Texture / finish contains</label><input type="text" id="textureQuery" placeholder="e.g. brushed"></div>
+        <div></div>
+        <div></div>
+      </div>
+
+      <button class="primary" id="findBtn">Find matches</button>
+      <span class="status" id="findStatus"></span>
+    </div>
+
+    <div class="scroll-table" style="margin-top:14px;">
+      <table>
+        <thead><tr><th>SKU</th><th>Description</th><th>Dimensions</th><th>Material</th><th>Color</th><th>Texture</th><th>USD</th><th>INR</th><th>Fit</th></tr></thead>
+        <tbody id="finderResultsBody"></tbody>
+      </table>
+    </div>
+  </section>
+
 </div>
 
 <script>
@@ -261,6 +365,80 @@ let RATE_DATE = "—";
 function fmtINR(n){
   if(n === null || n === undefined || isNaN(n)) return "—";
   return "₹" + Math.round(n).toLocaleString('en-IN');
+}
+
+// ===== Dimension parsing (from free-text description) =====
+const DIM_TRIPLET_RE = /(\d+(?:\.\d+)?)\s*[x×X]\s*(\d+(?:\.\d+)?)\s*[x×X]\s*(\d+(?:\.\d+)?)/g;
+const DIM_PAIR_RE    = /(\d+(?:\.\d+)?)\s*[x×X]\s*(\d+(?:\.\d+)?)/;
+const DIA_RE          = /dia\s*(\d+(?:\.\d+)?)\s*[x×X]\s*(\d+(?:\.\d+)?)/i;
+
+function parseDimensions(description){
+  const desc = description || '';
+  const dia = desc.match(DIA_RE);
+  if(dia){
+    const d = parseFloat(dia[1]);
+    return { diameter_mm: d, length_mm: d, width_mm: d, height_mm: null,
+             dimension_sets: null, dimension_parse_status: 'round', dimension_raw: dia[0] };
+  }
+  const triplets = [...desc.matchAll(DIM_TRIPLET_RE)];
+  if(triplets.length > 1){
+    const sets = triplets.map(t => ({ length_mm:+t[1], width_mm:+t[2], height_mm:+t[3] }));
+    return { diameter_mm: null,
+             length_mm: Math.max(...sets.map(s=>s.length_mm)),
+             width_mm:  Math.max(...sets.map(s=>s.width_mm)),
+             height_mm: Math.max(...sets.map(s=>s.height_mm)),
+             dimension_sets: sets, dimension_parse_status: 'multi_part',
+             dimension_raw: triplets.map(t=>t[0]).join(' / ') };
+  }
+  if(triplets.length === 1){
+    const t = triplets[0];
+    return { diameter_mm: null, length_mm:+t[1], width_mm:+t[2], height_mm:+t[3],
+             dimension_sets: null, dimension_parse_status: 'parsed', dimension_raw: t[0] };
+  }
+  const pair = desc.match(DIM_PAIR_RE);
+  if(pair){
+    return { diameter_mm: null, length_mm:+pair[1], width_mm:+pair[2], height_mm: null,
+             dimension_sets: null, dimension_parse_status: 'ambiguous', dimension_raw: pair[0] };
+  }
+  return { diameter_mm: null, length_mm: null, width_mm: null, height_mm: null,
+           dimension_sets: null, dimension_parse_status: 'no_dims', dimension_raw: null };
+}
+
+// ===== Unit conversion (mm canonical) =====
+const MM_PER_INCH = 25.4, MM_PER_FOOT = 304.8;
+
+function parseLength(raw, defaultUnit){ // defaultUnit: 'mm'|'in'|'ft' — used only for bare numbers
+  if(raw === null || raw === undefined) return null;
+  const s = String(raw).trim().toLowerCase().replace(/\s+/g, ' ');
+  if(!s) return null;
+  let m = s.match(/^(\d+(?:\.\d+)?)\s*(?:'|ft)\s*(\d+(?:\.\d+)?)?\s*(?:"|in)?$/); // 8'6" | 8ft 6in | 8'
+  if(m) return parseFloat(m[1]) * MM_PER_FOOT + (m[2] ? parseFloat(m[2]) * MM_PER_INCH : 0);
+  m = s.match(/^(\d+(?:\.\d+)?)\s*(?:"|in)$/);  if(m) return parseFloat(m[1]) * MM_PER_INCH;
+  m = s.match(/^(\d+(?:\.\d+)?)\s*mm$/);         if(m) return parseFloat(m[1]);
+  m = s.match(/^(\d+(?:\.\d+)?)$/);
+  if(m){
+    const n = parseFloat(m[1]);
+    return defaultUnit === 'mm' ? n : defaultUnit === 'in' ? n * MM_PER_INCH : n * MM_PER_FOOT;
+  }
+  return null; // unparseable — caller shows a validation message
+}
+
+function formatMm(mm, unit){
+  if(mm === null || mm === undefined || isNaN(mm)) return '—';
+  if(unit === 'mm') return Math.round(mm) + 'mm';
+  if(unit === 'in') return (mm / MM_PER_INCH).toFixed(1) + '"';
+  const totalIn = mm / MM_PER_INCH, ft = Math.floor(totalIn / 12), inch = Math.round(totalIn - ft * 12);
+  return ft + "'" + inch + '"';
+}
+
+function formatDims(it, unit){
+  if(it.dimension_parse_status === 'round' && it.diameter_mm != null){
+    return '⌀' + formatMm(it.diameter_mm, unit) + (it.height_mm != null ? ' × ' + formatMm(it.height_mm, unit) + 'H' : '');
+  }
+  if(it.length_mm == null || it.width_mm == null) return '—';
+  let s = formatMm(it.length_mm, unit) + ' × ' + formatMm(it.width_mm, unit) + (it.height_mm != null ? ' × ' + formatMm(it.height_mm, unit) : '');
+  if(it.dimension_parse_status === 'multi_part') s += ' (multi-part — verify)';
+  return s;
 }
 
 // ===== Passcode gate =====
@@ -290,9 +468,10 @@ async function loadAll(){
 }
 
 async function loadItems(){
-  const { data, error } = await sb.from('items').select('id, sku, description, usd').order('sku');
+  const { data, error } = await sb.from('items').select('id, sku, description, usd, length_mm, width_mm, height_mm, diameter_mm, dimension_sets, dimension_parse_status, dimension_raw, material, color, texture, material_review_status').order('sku');
   items = data || [];
   renderLedger();
+  renderMaterialFilters();
 }
 
 async function loadPending(){
@@ -429,11 +608,34 @@ document.getElementById('addSkuBtn').addEventListener('click', async ()=>{
     return;
   }
   const isVariant = items.some(it => it.sku.toUpperCase() === sku.toUpperCase());
-  await sb.from('items').insert({ sku, description, usd });
+
+  const dimUnit = document.getElementById('newDimUnit').value;
+  const length_mm = parseLength(document.getElementById('newLength').value.trim(), dimUnit);
+  const width_mm = parseLength(document.getElementById('newWidth').value.trim(), dimUnit);
+  const height_mm = parseLength(document.getElementById('newHeight').value.trim(), dimUnit);
+  const diameter_mm = parseLength(document.getElementById('newDiameter').value.trim(), dimUnit);
+  const material = document.getElementById('newMaterial').value.trim() || null;
+  const color = document.getElementById('newColor').value.trim() || null;
+  const texture = document.getElementById('newTexture').value.trim() || null;
+
+  await sb.from('items').insert({
+    sku, description, usd,
+    length_mm, width_mm, height_mm, diameter_mm,
+    dimension_parse_status: (length_mm != null || diameter_mm != null) ? 'parsed' : null,
+    material, color, texture,
+    material_review_status: (material || color || texture) ? 'reviewed' : 'pending'
+  });
   statusEl.textContent = isVariant ? "Added as a new variant of an existing SKU." : "Added.";
   document.getElementById('newSku').value = "";
   document.getElementById('newDesc').value = "";
   document.getElementById('newPrice').value = "";
+  document.getElementById('newLength').value = "";
+  document.getElementById('newWidth').value = "";
+  document.getElementById('newHeight').value = "";
+  document.getElementById('newDiameter').value = "";
+  document.getElementById('newMaterial').value = "";
+  document.getElementById('newColor').value = "";
+  document.getElementById('newTexture').value = "";
   await loadItems();
 });
 
@@ -465,6 +667,257 @@ loadAll = async function(){
   refreshDashboardCounts();
 };
 
+
+// ===== Data tools: dimension backfill =====
+document.getElementById('parseDimsBtn').addEventListener('click', async ()=>{
+  const statusEl = document.getElementById('parseDimsStatus');
+  const summaryEl = document.getElementById('parseDimsSummary');
+  const force = document.getElementById('forceReparse').checked;
+  const targets = items.filter(it => force || !it.dimension_parse_status);
+  if(!targets.length){
+    statusEl.textContent = 'Nothing to parse — every item already has a dimension_parse_status. Check "Force re-parse all" to redo.';
+    return;
+  }
+  statusEl.textContent = `Parsing ${targets.length} item(s)…`;
+  const counts = {};
+  let ok = 0, fail = 0;
+  for(const it of targets){
+    const parsed = parseDimensions(it.description);
+    counts[parsed.dimension_parse_status] = (counts[parsed.dimension_parse_status] || 0) + 1;
+    const { error } = await sb.from('items').update(parsed).eq('id', it.id);
+    if(error) fail++; else ok++;
+  }
+  statusEl.textContent = `Done. Updated ${ok}, failed ${fail}.`;
+  summaryEl.textContent = Object.entries(counts).map(([k,v]) => `${k}: ${v}`).join('   ·   ');
+  await loadItems();
+});
+
+// ===== Data tools: material/color/texture suggestion + CSV review round-trip =====
+const FINISH_KEYWORDS_RE = /(powder coated|pvd|brushed|matte|gloss|plated|polished)[^,/]*/i;
+
+function suggestMaterialColorTexture(description){
+  const desc = description || '';
+  const segs = desc.split(',').map(s => s.trim()).filter(s => s.length);
+  if(segs.length <= 1) return { material: '', color: '', texture: '', flag: 'REVIEW' };
+  let mid = segs.slice(1); // drop the variant-name segment (segment 0)
+  if(mid.length){
+    const last = mid[mid.length - 1];
+    DIM_TRIPLET_RE.lastIndex = 0;
+    const isDims = DIM_TRIPLET_RE.test(last) || DIA_RE.test(last) || /^standard$/i.test(last);
+    DIM_TRIPLET_RE.lastIndex = 0;
+    if(isDims) mid = mid.slice(0, -1);
+  }
+  if(mid.length === 2) return { material: mid[0], color: mid[1], texture: '', flag: '' };
+  if(mid.length === 1){
+    let material = mid[0], texture = '', flag = 'REVIEW';
+    const fm = material.match(FINISH_KEYWORDS_RE);
+    if(fm){
+      texture = fm[0].trim();
+      material = material.replace(fm[0], '').replace(/[/+]\s*$/, '').trim();
+    }
+    return { material, color: '', texture, flag };
+  }
+  if(mid.length >= 3) return { material: mid.slice(0, -1).join(', '), color: mid[mid.length - 1], texture: '', flag: 'REVIEW' };
+  return { material: '', color: '', texture: '', flag: 'REVIEW' };
+}
+
+document.getElementById('exportCsvBtn').addEventListener('click', ()=>{
+  const statusEl = document.getElementById('exportCsvStatus');
+  const rows = items.map(it => {
+    const s = suggestMaterialColorTexture(it.description);
+    return {
+      id: it.id, sku: it.sku, description: it.description,
+      material_suggested: s.material, color_suggested: s.color, texture_suggested: s.texture,
+      material_final: s.material, color_final: s.color, texture_final: s.texture,
+      flag: s.flag
+    };
+  });
+  const csv = Papa.unparse(rows);
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'terminal-material-review.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  statusEl.textContent = `Exported ${rows.length} row(s).`;
+});
+
+document.getElementById('importCsvBtn').addEventListener('click', ()=>{
+  const fileInput = document.getElementById('importCsvInput');
+  const statusEl = document.getElementById('importCsvStatus');
+  const file = fileInput.files && fileInput.files[0];
+  if(!file){ statusEl.textContent = "Choose a CSV file first."; return; }
+  Papa.parse(file, {
+    header: true, skipEmptyLines: true,
+    complete: async (results) => {
+      const rows = results.data.filter(r => r.id);
+      statusEl.textContent = `Importing ${rows.length} row(s)…`;
+      let ok = 0, fail = 0;
+      const CHUNK = 20;
+      for(let i = 0; i < rows.length; i += CHUNK){
+        const chunk = rows.slice(i, i + CHUNK);
+        await Promise.all(chunk.map(async row => {
+          // Matched by id, never sku — sku is not unique across variants.
+          const { error } = await sb.from('items').update({
+            material: (row.material_final || '').trim() || null,
+            color: (row.color_final || '').trim() || null,
+            texture: (row.texture_final || '').trim() || null,
+            material_review_status: 'reviewed'
+          }).eq('id', parseInt(row.id, 10));
+          if(error) fail++; else ok++;
+        }));
+        statusEl.textContent = `Imported ${ok + fail}/${rows.length} (${fail} failed so far)…`;
+      }
+      statusEl.textContent = `Done. Updated ${ok}, failed ${fail}.`;
+      await loadItems();
+    },
+    error: (err) => { statusEl.textContent = "Failed to parse CSV: " + err.message; }
+  });
+});
+
+// ===== Furniture finder =====
+let excludedMaterials = new Set();
+
+function renderMaterialFilters(){
+  const wrap = document.getElementById('materialFilterWrap');
+  if(!wrap) return;
+  const materials = [...new Set(items.map(it => (it.material || '').trim()).filter(Boolean))].sort();
+  wrap.innerHTML = '';
+  if(!materials.length){
+    wrap.innerHTML = '<span class="empty-note">No materials populated yet — use Data tools above to backfill.</span>';
+    return;
+  }
+  materials.forEach(m => {
+    const checked = !excludedMaterials.has(m);
+    const label = document.createElement('label');
+    label.className = 'checkbox-filter';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = checked;
+    cb.addEventListener('change', ()=>{ if(cb.checked) excludedMaterials.delete(m); else excludedMaterials.add(m); });
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(' ' + m));
+    wrap.appendChild(label);
+  });
+}
+
+document.getElementById('modeRoomBtn').addEventListener('click', ()=>{
+  document.getElementById('modeRoomBtn').classList.add('active');
+  document.getElementById('modeFurnitureBtn').classList.remove('active');
+  document.getElementById('roomModeInputs').style.display = '';
+  document.getElementById('furnitureModeInputs').style.display = 'none';
+  document.getElementById('toleranceRow').style.display = 'none';
+});
+document.getElementById('modeFurnitureBtn').addEventListener('click', ()=>{
+  document.getElementById('modeFurnitureBtn').classList.add('active');
+  document.getElementById('modeRoomBtn').classList.remove('active');
+  document.getElementById('roomModeInputs').style.display = 'none';
+  document.getElementById('furnitureModeInputs').style.display = '';
+  document.getElementById('toleranceRow').style.display = '';
+});
+
+function passesFilters(it, filters){
+  if(filters.excludedMaterials.has((it.material || '').trim())) return false;
+  if(filters.textureQuery && !(it.texture || '').toLowerCase().includes(filters.textureQuery.toLowerCase())) return false;
+  return true;
+}
+
+// Room mode: furniture footprint must fit inside (room - clearance). Rotation (piece placed sideways)
+// is allowed by default since that's standard practice when checking whether a piece fits a space.
+function findRoomFits(roomL, roomW, clearance, filters){
+  const maxL = roomL - clearance, maxW = roomW - clearance;
+  return items.filter(it => passesFilters(it, filters) && it.length_mm != null && it.width_mm != null)
+    .map(it => {
+      if(it.dimension_parse_status === 'multi_part'){
+        return { ...it, needsManualCheck: true };
+      }
+      const asIs = it.length_mm <= maxL && it.width_mm <= maxW;
+      const rotated = it.width_mm <= maxL && it.length_mm <= maxW;
+      if(!asIs && !rotated) return null;
+      return { ...it, rotated: !asIs,
+        spareL: asIs ? maxL - it.length_mm : maxL - it.width_mm,
+        spareW: asIs ? maxW - it.width_mm : maxW - it.length_mm };
+    })
+    .filter(Boolean)
+    .sort((a,b) => ((a.spareL ?? 0) + (a.spareW ?? 0)) - ((b.spareL ?? 0) + (b.spareW ?? 0)));
+}
+
+// Furniture mode: item L/W (and optional H) must be within tolerancePct of the target, straight or rotated.
+function findFurnitureMatches(targetL, targetW, targetH, tolerancePct, filters){
+  const tol = tolerancePct / 100;
+  const within = (a, b) => Math.abs(a - b) <= b * tol;
+  return items.filter(it => passesFilters(it, filters) && it.length_mm != null && it.width_mm != null)
+    .map(it => {
+      const withinH = targetH == null || it.height_mm == null || within(it.height_mm, targetH);
+      if(!withinH) return null;
+      const straight = within(it.length_mm, targetL) && within(it.width_mm, targetW);
+      const rotated = within(it.width_mm, targetL) && within(it.length_mm, targetW);
+      if(!straight && !rotated) return null;
+      const diffPct = straight
+        ? (Math.abs(it.length_mm - targetL) + Math.abs(it.width_mm - targetW)) / (targetL + targetW)
+        : (Math.abs(it.width_mm - targetL) + Math.abs(it.length_mm - targetW)) / (targetL + targetW);
+      return { ...it, rotated: !straight, diffPct };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.diffPct - b.diffPct);
+}
+
+function renderFinderResults(results, unit, isRoomMode){
+  const body = document.getElementById('finderResultsBody');
+  body.innerHTML = '';
+  if(!results.length){
+    body.innerHTML = '<tr><td colspan="9" class="empty-note">No matches. Try widening the clearance/tolerance, or check the material/texture filters.</td></tr>';
+    return;
+  }
+  results.forEach(it => {
+    let fit;
+    if(it.needsManualCheck){
+      fit = 'Multi-part — verify manually';
+    } else if(isRoomMode){
+      fit = `spare ${formatMm(it.spareL, unit)} × ${formatMm(it.spareW, unit)}` + (it.rotated ? ' (rotated)' : '');
+    } else {
+      fit = (it.diffPct * 100).toFixed(1) + '% off target' + (it.rotated ? ' (rotated)' : '');
+    }
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${it.sku}</td>
+      <td class="desc-cell">${it.description}</td>
+      <td>${formatDims(it, unit)}</td>
+      <td>${it.material || '—'}</td>
+      <td>${it.color || '—'}</td>
+      <td>${it.texture || '—'}</td>
+      <td>${it.usd != null ? '$' + it.usd : '—'}</td>
+      <td>${it.usd != null ? fmtINR(it.usd * RATE) : '—'}</td>
+      <td>${fit}</td>`;
+    body.appendChild(tr);
+  });
+}
+
+document.getElementById('findBtn').addEventListener('click', ()=>{
+  const statusEl = document.getElementById('findStatus');
+  const unit = document.getElementById('finderUnit').value;
+  const filters = { excludedMaterials: new Set(excludedMaterials), textureQuery: document.getElementById('textureQuery').value.trim() };
+  const isRoomMode = document.getElementById('modeRoomBtn').classList.contains('active');
+  let results;
+  if(isRoomMode){
+    const roomL = parseLength(document.getElementById('roomLength').value, unit);
+    const roomW = parseLength(document.getElementById('roomWidth').value, unit);
+    const clearanceRaw = document.getElementById('roomClearance').value.trim();
+    const clearance = clearanceRaw ? parseLength(clearanceRaw, unit) : 0;
+    if(roomL == null || roomW == null){ statusEl.textContent = "Enter a valid room length and width."; return; }
+    results = findRoomFits(roomL, roomW, clearance ?? 0, filters);
+  } else {
+    const targetL = parseLength(document.getElementById('targetLength').value, unit);
+    const targetW = parseLength(document.getElementById('targetWidth').value, unit);
+    const targetHRaw = document.getElementById('targetHeight').value.trim();
+    const targetH = targetHRaw ? parseLength(targetHRaw, unit) : null;
+    const tolerancePct = parseFloat(document.getElementById('targetTolerance').value) || 10;
+    if(targetL == null || targetW == null){ statusEl.textContent = "Enter a valid target length and width."; return; }
+    results = findFurnitureMatches(targetL, targetW, targetH, tolerancePct, filters);
+  }
+  statusEl.textContent = `${results.length} match(es).`;
+  renderFinderResults(results, unit, isRoomMode);
+});
 </script>
 </body>
 </html>
