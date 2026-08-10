@@ -23,25 +23,34 @@
   *{box-sizing:border-box;}
   body{
     margin:0;
-    background:var(--paper);
+    background-color:var(--paper);
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='170' height='170'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.05 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
     color:var(--ink);
     font-family:'Source Serif 4', Georgia, serif;
     min-height:100vh;
+    position:relative;
   }
   .wrap{
-    max-width:880px;
+    max-width:900px;
     margin:0 auto;
-    padding:48px 28px 80px;
+    padding:64px 30px 96px;
+    position:relative;
   }
   .masthead{
     display:flex;
     justify-content:space-between;
     align-items:flex-end;
     gap:16px;
-    border-bottom:3px solid var(--ink);
-    padding-bottom:14px;
-    margin-bottom:6px;
+    position:relative;
+    padding-bottom:20px;
+    margin-bottom:14px;
     flex-wrap:wrap;
+  }
+  .masthead::after{
+    content:'';
+    position:absolute; left:0; right:0; bottom:0; height:7px;
+    background-repeat:repeat-x; background-size:58px 7px; opacity:.88;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='58' height='7'%3E%3Cpath d='M0 3.5 Q9 1 18 3.6 T36 3.3 T58 3.6' stroke='%231C1A17' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
   }
   .brand{ display:flex; flex-direction:column; align-items:flex-start; }
   .logo{ height:76px; width:auto; display:block; }
@@ -81,6 +90,7 @@
     display:flex;
     border:2px solid var(--ink);
     background:#FFFEFA;
+    border-radius:2px 14px 3px 10px;
   }
   .search-row input{
     flex:1;
@@ -107,6 +117,7 @@
     position:absolute; top:100%; left:0; right:0; z-index:20;
     background:#FFFEFA; border:1px solid var(--ink); border-top:none;
     max-height:280px; overflow-y:auto; display:none;
+    border-radius:0 0 10px 4px;
   }
   .suggest-list.show{ display:block; }
   .suggest-item{
@@ -135,6 +146,7 @@
   .result{
     margin-top:22px; border:1px solid var(--line); background:#FFFEFA;
     padding:22px 24px; display:none;
+    border-radius:2px 16px 3px 12px;
   }
   .result.show{ display:block; }
   .result .sku{
@@ -148,8 +160,9 @@
   .usd-price{ font-family:'IBM Plex Mono', monospace; font-size:14px; color:var(--ink-soft); }
   .stamp{
     font-family:'Fraunces', serif; font-weight:700; font-size:30px; color:var(--stamp);
-    border:2.5px solid var(--stamp); padding:6px 16px; transform:rotate(-3deg);
+    border:2.5px solid var(--stamp); padding:6px 16px; transform:rotate(-2.4deg);
     display:inline-block; position:relative;
+    border-radius:3px 12px 4px 11px;
   }
   .stamp small{
     font-family:'IBM Plex Mono', monospace; font-size:11px; font-weight:500;
@@ -164,6 +177,7 @@
   .empty{
     margin-top:22px; padding:20px 24px; border:1px dashed var(--line);
     font-family:'IBM Plex Mono', monospace; font-size:13px; color:var(--ink-soft); display:none;
+    border-radius:2px 14px 3px 10px;
   }
   .empty.show{ display:block; }
   .loading-note{
@@ -188,10 +202,23 @@
   .scroll-table thead th{ position:sticky; top:0; background:var(--paper); }
 
   footer{
-    margin-top:40px; font-family:'IBM Plex Mono', monospace; font-size:10.5px;
+    margin-top:48px; font-family:'IBM Plex Mono', monospace; font-size:10.5px;
     color:var(--ink-soft); line-height:1.6;
+    display:flex; align-items:center; gap:10px;
   }
   footer a{ color:var(--ink-soft); }
+  footer .seal{
+    flex:none; width:15px; height:15px; border-radius:50%;
+    background:var(--stamp); opacity:.55;
+  }
+
+  /* ===== Decorative motifs — non-functional, desktop only ===== */
+  .deco{ position:fixed; pointer-events:none; z-index:0; display:none; }
+  @media (min-width:960px){
+    .deco{ display:block; }
+    .deco-enso{ top:-46px; right:-46px; width:230px; opacity:.13; }
+    .deco-branch{ bottom:-34px; left:-24px; width:190px; opacity:.15; }
+  }
 
   @media (max-width: 640px){
     .wrap{ padding:24px 16px 56px; }
@@ -214,6 +241,26 @@
 </style>
 </head>
 <body>
+
+<!-- Decorative ink-brush motifs — purely ornamental, no function -->
+<svg width="0" height="0" style="position:absolute">
+  <filter id="inkRough" x="-30%" y="-30%" width="160%" height="160%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="7" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="2.2"/>
+  </filter>
+</svg>
+<svg class="deco deco-enso" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <path d="M 100 25 A 75 75 0 1 1 40 55" fill="none" stroke="var(--ink)" stroke-width="7" stroke-linecap="round" filter="url(#inkRough)"/>
+</svg>
+<svg class="deco deco-branch" viewBox="0 0 300 420" xmlns="http://www.w3.org/2000/svg">
+  <path d="M 10 415 C 25 350, 15 300, 45 245 C 65 205, 55 175, 90 130 C 112 100, 105 75, 140 30"
+        fill="none" stroke="var(--ink)" stroke-width="3.2" stroke-linecap="round" filter="url(#inkRough)"/>
+  <path d="M 55 260 C 80 245, 100 250, 128 228" fill="none" stroke="var(--ink)" stroke-width="1.8" stroke-linecap="round" filter="url(#inkRough)"/>
+  <path d="M 95 150 C 78 138, 60 142, 42 130" fill="none" stroke="var(--ink)" stroke-width="1.6" stroke-linecap="round" filter="url(#inkRough)"/>
+  <circle cx="140" cy="30" r="4.5" fill="var(--stamp)" opacity="0.8"/>
+  <circle cx="128" cy="228" r="3" fill="var(--stamp)" opacity="0.5"/>
+</svg>
+
 <div class="wrap">
 
   <div class="masthead">
@@ -245,6 +292,7 @@
   <div class="loading-note" id="loadingNote">Loading catalog…</div>
 
   <footer>
+    <span class="seal" aria-hidden="true"></span>
     Prices update from the live catalog. Rate is set by the store.
   </footer>
 
