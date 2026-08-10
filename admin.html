@@ -465,6 +465,46 @@
   @media (prefers-color-scheme: dark){ .fit-chip.is-good{ color:#DCEB9A; } }
   :root[data-theme="dark"] .fit-chip.is-good{ color:#DCEB9A; }
 
+  /* ===== AI designer ===== */
+  .ai-card{ border-color:color-mix(in srgb, var(--accent) 30%, var(--border)); }
+  .ai-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:14px; margin-bottom:14px; }
+  .ai-badge{
+    flex:none; font-size:10.5px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase;
+    background:color-mix(in srgb, var(--accent) 16%, transparent); color:var(--accent);
+    padding:5px 11px; border-radius:var(--radius-pill);
+  }
+  #aiBrief{ resize:vertical; min-height:56px; }
+  .ai-result{ margin-top:16px; }
+  .ai-summary{
+    font-size:14px; line-height:1.6; padding:14px 16px; border-radius:var(--radius-md);
+    background:color-mix(in srgb, var(--accent-2) 26%, var(--surface-2));
+    color:var(--text); border-left:3px solid var(--accent);
+  }
+  .ai-picks{ display:flex; flex-direction:column; gap:10px; margin-top:14px; }
+  .ai-pick{
+    display:flex; gap:12px; padding:14px 16px; border-radius:var(--radius-md);
+    background:var(--surface-2); border:1px solid var(--border);
+  }
+  .ai-role{
+    flex:none; width:104px; font-size:10.5px; font-weight:700; letter-spacing:0.05em;
+    text-transform:uppercase; color:var(--accent); padding-top:2px;
+  }
+  .ai-pick-body{ flex:1; min-width:0; }
+  .ai-pick-name{ font-family:var(--font-display); font-weight:600; font-size:14px; }
+  .ai-pick-sku{ font-family:var(--font-mono); font-size:11px; color:var(--text-muted); margin-top:2px; }
+  .ai-pick-why{ font-size:13px; line-height:1.6; margin-top:7px; }
+  .ai-pick-facts{
+    font-family:var(--font-mono); font-size:11.5px; color:var(--text-muted);
+    margin-top:7px; display:flex; flex-wrap:wrap; gap:6px 14px;
+  }
+  .ai-pick-facts b{ color:var(--text); font-weight:600; }
+  .ai-note{ margin-top:12px; font-size:12.5px; color:var(--warn); }
+  .ai-setup{
+    margin-top:12px; font-size:12.5px; color:var(--text-muted); line-height:1.7;
+    background:var(--surface-2); padding:14px 16px; border-radius:var(--radius-md);
+  }
+  .ai-setup code{ font-family:var(--font-mono); font-size:11.5px; background:var(--surface-3); padding:1px 6px; border-radius:5px; }
+
   /* ===== Detail views ===== */
   .detail-view section{ margin-top:26px; }
   .detail-view section:first-of-type{ margin-top:0; }
@@ -800,6 +840,20 @@
 
         <button class="primary" id="findBtn">Suggest furniture</button>
         <span class="status" id="findStatus"></span>
+      </div>
+
+      <div class="card ai-card" style="margin-top:14px;">
+        <div class="ai-head">
+          <div>
+            <div class="eyebrow">Ask the AI designer</div>
+            <div class="note" style="margin-top:6px;">Describe the client in your own words. It picks from the pieces that already fit, and explains the scheme.</div>
+          </div>
+          <span class="ai-badge" id="aiModelBadge">AI</span>
+        </div>
+        <textarea id="aiBrief" rows="2" placeholder="e.g. Family of four, warm and uncluttered, no leather, around ₹3 lakh for the sofa"></textarea>
+        <button class="primary" id="aiBtn">Ask the AI designer</button>
+        <span class="status" id="aiStatus"></span>
+        <div id="aiResult" class="ai-result"></div>
       </div>
 
       <div class="section-label" style="margin-top:26px;">
@@ -1855,6 +1909,140 @@ function renderFinderResults(results, unit, isRoomMode){
 }
 
 document.getElementById('findBtn').addEventListener('click', runSuggest);
+
+// ===== AI designer =====
+// The OpenRouter key lives only in the Supabase Edge Function. This page holds
+// no model credentials — it sends the already-ranked shortlist and the brief.
+const AI_ENDPOINT = SUPABASE_URL + '/functions/v1/ai-suggest';
+
+// Rebuild the current brief and shortlist without touching the rendered UI.
+function currentShortlist(limit){
+  const unit = document.getElementById('finderUnit').value;
+  const isRoomMode = document.getElementById('modeRoomBtn').classList.contains('active');
+  const typeFilter = document.getElementById('typeFilter').value;
+  const budgetRaw = document.getElementById('budgetInput').value.replace(/[^0-9.]/g, '');
+  const budgetInr = budgetRaw ? parseFloat(budgetRaw) : null;
+  const filters = {
+    excludedMaterials: new Set(excludedMaterials),
+    textureQuery: document.getElementById('textureQuery').value.trim(),
+    typeFilter: typeFilter || null
+  };
+  const pool = items.filter(it => passesFilters(it, filters));
+  const opts = { budgetInr, typeFilter: filters.typeFilter };
+
+  let scored, context;
+  if(isRoomMode){
+    const roomL = parseLength(document.getElementById('roomLength').value, unit);
+    const roomW = parseLength(document.getElementById('roomWidth').value, unit);
+    const clearRaw = document.getElementById('roomClearance').value.trim();
+    const clearance = clearRaw ? (parseLength(clearRaw, unit) || 0) : 0;
+    if(roomL == null || roomW == null) return { error: 'Enter a valid room length and width first.' };
+    scored = pool.map(it => scoreForRoom(it, roomL, roomW, clearance, opts)).filter(Boolean);
+    context = 'Room ' + formatMm(roomL, unit) + ' × ' + formatMm(roomW, unit) +
+              ', keeping ' + formatMm(clearance, unit) + ' clearance';
+  } else {
+    const tL = parseLength(document.getElementById('targetLength').value, unit);
+    const tW = parseLength(document.getElementById('targetWidth').value, unit);
+    if(tL == null || tW == null) return { error: 'Enter a valid target length and width first.' };
+    const tHRaw = document.getElementById('targetHeight').value.trim();
+    const tH = tHRaw ? parseLength(tHRaw, unit) : null;
+    const tol = parseFloat(document.getElementById('targetTolerance').value) || 10;
+    scored = pool.map(it => scoreForTarget(it, tL, tW, tH, tol, opts)).filter(Boolean);
+    context = 'Looking for a piece near ' + formatMm(tL, unit) + ' × ' + formatMm(tW, unit);
+  }
+  if(typeFilter) context += '; only ' + typeFilter.toLowerCase() + 's';
+  if(budgetInr) context += '; budget about ' + fmtINR(budgetInr) + ' per piece';
+  if(excludedMaterials.size) context += '; must avoid ' + [...excludedMaterials].join(', ');
+
+  const top = scored.sort((a, b) => b.score - a.score).slice(0, limit);
+  return {
+    context,
+    candidates: top.map(r => ({
+      ref: r.item.id,          // row id, not SKU — one SKU can be several variants
+      sku: r.item.sku,
+      type: r.item._type,
+      name: productName(r.item.description),
+      dims: formatDims(r.item, unit),
+      material: (r.item._mats || []).join('/'),
+      price: r.item._inr != null ? fmtINR(r.item._inr) : 'price on request',
+      score: Math.round(r.score * 100)
+    }))
+  };
+}
+
+function renderAiSetupHelp(detail){
+  return '<div class="ai-setup"><b>The AI function isn\'t reachable yet.</b><br>' +
+    'Deploy it once, then this works: create the Edge Function <code>ai-suggest</code> in your ' +
+    'Supabase dashboard, paste in <code>supabase/functions/ai-suggest/index.ts</code> from this repo, ' +
+    'and add a secret named <code>OPENROUTER_API_KEY</code>. The key stays on the server — it is never ' +
+    'sent to this page.' + (detail ? '<br><br><span style="opacity:.75">' + esc(detail) + '</span>' : '') + '</div>';
+}
+
+document.getElementById('aiBtn').addEventListener('click', async ()=>{
+  const statusEl = document.getElementById('aiStatus');
+  const out = document.getElementById('aiResult');
+  const brief = document.getElementById('aiBrief').value.trim();
+
+  const shortlist = currentShortlist(24);
+  if(shortlist.error){ statusEl.textContent = shortlist.error; return; }
+  if(!shortlist.candidates.length){
+    statusEl.textContent = '';
+    out.innerHTML = '<div class="empty-note">Nothing in the catalogue fits that brief yet — widen the size or clear a filter.</div>';
+    return;
+  }
+
+  statusEl.textContent = 'Thinking…';
+  out.innerHTML = '';
+  try{
+    const res = await fetch(AI_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + SUPABASE_ANON_KEY,
+        'apikey': SUPABASE_ANON_KEY
+      },
+      body: JSON.stringify({ brief, context: shortlist.context, candidates: shortlist.candidates })
+    });
+    const data = await res.json().catch(()=>({}));
+
+    if(!res.ok){
+      statusEl.textContent = '';
+      out.innerHTML = renderAiSetupHelp(data.error || ('HTTP ' + res.status) );
+      return;
+    }
+
+    // Resolve by row id so the card shows the exact variant the model chose —
+    // matching on SKU alone would surface the wrong material.
+    const byRef = {};
+    items.forEach(it => { byRef[String(it.id)] = it; });
+    const picks = (data.picks || []).map(p => ({ p, it: byRef[String(p.ref)] })).filter(x => x.it);
+
+    statusEl.textContent = picks.length + ' picks' + (data.model ? ' · ' + data.model.split('/').pop() : '');
+    if(data.model) document.getElementById('aiModelBadge').textContent = data.model.split('/').pop();
+
+    const unit = document.getElementById('finderUnit').value;
+    out.innerHTML =
+      (data.summary ? '<div class="ai-summary">' + esc(data.summary) + '</div>' : '') +
+      '<div class="ai-picks">' + picks.map(({p, it}) =>
+        '<div class="ai-pick">' +
+          '<div class="ai-role">' + esc(p.role || 'piece') + '</div>' +
+          '<div class="ai-pick-body">' +
+            '<div class="ai-pick-name">' + esc(productName(it.description)) + '</div>' +
+            '<div class="ai-pick-sku">' + esc(it.sku) + ' · ' + esc(it._type) + '</div>' +
+            '<div class="ai-pick-why">' + esc(p.why || '') + '</div>' +
+            '<div class="ai-pick-facts">' +
+              '<span>' + formatDims(it, unit) + '</span>' +
+              '<span>' + ((it._mats && it._mats.length) ? esc(it._mats.join(' · ')) : 'material not listed') + '</span>' +
+              '<b>' + (it._inr != null ? fmtINR(it._inr) : 'price on request') + '</b>' +
+            '</div>' +
+          '</div>' +
+        '</div>').join('') + '</div>' +
+      (data.note ? '<div class="ai-note">' + esc(data.note) + '</div>' : '');
+  }catch(err){
+    statusEl.textContent = '';
+    out.innerHTML = renderAiSetupHelp(String(err && err.message || err));
+  }
+});
 </script>
 </body>
 </html>

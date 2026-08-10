@@ -60,6 +60,37 @@ The full migration (additive, nullable columns only) is in `migration_furniture_
 - **Top products**: the most-searched SKUs resolved back to catalog items, with product name, SKU and INR price.
 - **Local weather**: current temperature and conditions for wherever the admin is. Location comes from the browser's geolocation prompt, falling back to IP lookup, then to Dhaka. This is the only part of the app that calls third-party services — `open-meteo.com` (weather, no API key), `ipwho.is` (IP location) and `bigdatacloud.net` (reverse geocoding). All are called from the browser; if any is blocked the card degrades to "Weather unavailable" and nothing else is affected.
 
+## AI suggestions (optional)
+
+The Furniture Finder can hand its shortlist to a language model, which proposes a
+coherent scheme and explains each choice. It is optional — the scoring engine works
+on its own, and the panel degrades to a setup hint if the function isn't deployed.
+
+**The OpenRouter key must never go in `admin.html`.** This repo and the GitHub Pages
+site are public, so a key in the page is a key anyone can read and spend. It lives in
+a Supabase Edge Function instead:
+
+1. Supabase dashboard → **Edge Functions** → **Deploy a new function**, name it
+   `ai-suggest`, and paste in `supabase/functions/ai-suggest/index.ts`.
+2. Supabase dashboard → **Project Settings → Edge Functions → Secrets** → add
+   `OPENROUTER_API_KEY` with your key. Optionally add `OPENROUTER_MODEL` to change
+   models.
+
+With the CLI instead: `supabase secrets set OPENROUTER_API_KEY=...` then
+`supabase functions deploy ai-suggest`.
+
+Notes:
+- Only the shortlist the local engine already ranked is sent (max 24 items), so the
+  model can only choose between pieces that physically fit, and cannot invent stock.
+- Each candidate carries a row `ref`, not just a SKU — one SKU covers several
+  variants (the same sofa in leather and in fabric), and they are not interchangeable.
+  Replies are resolved by `ref` so the card shows the exact variant chosen.
+- Default model is `google/gemini-3.5-flash-lite` (~₹0.12 a search). This account
+  restricts providers to nvidia/mistral/tencent/cloudflare/perplexity/google-ai-studio,
+  so Anthropic and OpenAI models return `404 no allowed providers`.
+- The function is callable by anyone holding the anon key (which is in the page).
+  Set a spend limit on the OpenRouter key to bound the worst case.
+
 ## Data history / key decisions
 
 - Catalog was built from ~13 supplier PDFs (price lists, quotations, a proforma invoice). OCR was tried and abandoned as unreliable; extraction was done by reading each PDF directly.
