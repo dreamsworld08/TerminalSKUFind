@@ -56,7 +56,9 @@ The full migration (additive, nullable columns only) is in `migration_furniture_
   - *Export material/color/texture review CSV*: downloads a CSV with best-guess material/color/texture per item (parsed from `description`), flagging low-confidence rows as `REVIEW`. Nothing is written to the database at this step.
   - *Import corrected CSV*: re-upload the reviewed CSV to write `material`/`color`/`texture` back to the DB, matched by row `id` (never by `sku`, since SKU isn't unique).
 - **Furniture Finder**: given a client's room size or a target furniture size — entered in mm, inches, or feet (including `8'6"` notation) — lists catalog items that fit, with material/texture filters (e.g. exclude leather). Room mode checks footprint against (room size − a configurable clearance margin); furniture mode matches within a configurable tolerance %. Both allow the piece to be rotated 90°. Multi-part/combo items are always shown with a "verify manually" flag rather than silently included or excluded.
-- **Analytics**: total searches, distinct SKUs searched, ranked bar list of most-searched SKUs (from `search_counts`).
+- **Analytics**: total searches and distinct SKUs searched, plus a bar chart of the most-searched SKUs (from `search_counts`), shown directly on the dashboard.
+- **Top products**: the most-searched SKUs resolved back to catalog items, with product name, SKU and INR price.
+- **Local weather**: current temperature and conditions for wherever the admin is. Location comes from the browser's geolocation prompt, falling back to IP lookup, then to Dhaka. This is the only part of the app that calls third-party services — `open-meteo.com` (weather, no API key), `ipwho.is` (IP location) and `bigdatacloud.net` (reverse geocoding). All are called from the browser; if any is blocked the card degrades to "Weather unavailable" and nothing else is affected.
 
 ## Data history / key decisions
 
