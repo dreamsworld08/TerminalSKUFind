@@ -90,6 +90,22 @@
   .toggle-btn.active{ background:var(--ink); color:var(--paper); border-color:var(--ink); }
   .checkbox-filter{ display:inline-flex; align-items:center; gap:6px; margin:0 16px 8px 0; font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--ink); }
   .checkbox-filter input{ width:auto; margin:0; }
+
+  .dash-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(230px, 1fr)); gap:16px; margin-top:28px; }
+  .dash-card{
+    display:block; width:100%; box-sizing:border-box; text-align:left;
+    font-family:inherit; border:1px solid var(--line); background:#FFFEFA;
+    padding:22px; cursor:pointer; transition:border-color .15s;
+  }
+  .dash-card:hover{ border-color:var(--ink); }
+  .dash-card .dash-num{ font-family:'Fraunces', serif; font-size:28px; font-weight:700; color:var(--ink); line-height:1.1; }
+  .dash-card .dash-title{
+    font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:0.14em;
+    text-transform:uppercase; color:var(--ink-soft); margin-top:8px;
+  }
+  .dash-card .dash-desc{ font-family:'Source Serif 4', serif; font-size:12.5px; color:var(--ink-soft); margin-top:8px; line-height:1.45; }
+  .back-btn{ margin-bottom:20px; }
+  .detail-view section:first-of-type{ margin-top:0; }
   button.primary{
     font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:0.06em;
     text-transform:uppercase; background:var(--ink); color:var(--paper);
@@ -184,153 +200,209 @@
     <button class="logout" id="logoutBtn">Lock</button>
   </div>
 
-  <section>
-    <div class="section-label">Analytics — searches so far</div>
-    <div class="stat-row">
-      <div class="stat"><div class="num" id="statTotal">—</div><div class="lbl">Total searches logged</div></div>
-      <div class="stat"><div class="num" id="statUnique">—</div><div class="lbl">Distinct SKUs searched</div></div>
+  <div id="viewDashboard">
+    <div class="dash-grid">
+      <button class="dash-card" data-view="view-rate">
+        <div class="dash-num" id="dashRateNum">—</div>
+        <div class="dash-title">USD → INR rate</div>
+        <div class="dash-desc" id="dashRateDate">Set the conversion rate used across the ledger.</div>
+      </button>
+      <button class="dash-card" data-view="view-addsku">
+        <div class="dash-num" id="dashPendingBadge">—</div>
+        <div class="dash-title">Add a new SKU</div>
+        <div class="dash-desc">Add items to the ledger, or assign SKUs to items still pending one.</div>
+      </button>
+      <button class="dash-card" data-view="view-finder">
+        <div class="dash-num">⌂</div>
+        <div class="dash-title">Furniture finder</div>
+        <div class="dash-desc">Match a client's room or furniture size to the catalog, filtered by material.</div>
+      </button>
+      <button class="dash-card" data-view="view-ledger">
+        <div class="dash-num" id="dashLedgerCount">—</div>
+        <div class="dash-title">Full ledger</div>
+        <div class="dash-desc">Browse, search and delete every item in the catalog.</div>
+      </button>
+      <button class="dash-card" data-view="view-mostsearched">
+        <div class="dash-num" id="dashTopSku">—</div>
+        <div class="dash-title">Most searched products</div>
+        <div class="dash-desc">Ranked list of the most-searched SKUs.</div>
+      </button>
+      <button class="dash-card" data-view="view-analytics">
+        <div class="dash-num" id="dashTotalSearches">—</div>
+        <div class="dash-title">Analytics — searches so far</div>
+        <div class="dash-desc" id="dashDistinctSkus">Total searches logged.</div>
+      </button>
     </div>
-    <div class="section-label">Most searched products</div>
-    <div class="card" id="topSearchesCard">
-      <div class="empty-note">Loading…</div>
-    </div>
-  </section>
+  </div>
 
-  <section>
-    <div class="section-label">USD → INR rate</div>
-    <div class="card" style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
-      <div>1 USD = <b id="rateDisplay">—</b> <span id="rateDateDisplay" style="color:var(--ink-soft); font-family:'IBM Plex Mono', monospace; font-size:11px;"></span></div>
-      <input type="text" id="newRateInput" placeholder="New rate e.g. 95.40" style="max-width:180px; margin-bottom:0;">
-      <button class="primary" id="updateRateBtn">Update rate</button>
-      <span class="status" id="rateStatus"></span>
-    </div>
-  </section>
+  <div id="view-analytics" class="detail-view" style="display:none;">
+    <button class="logout back-btn" data-back>← Dashboard</button>
+    <section>
+      <div class="section-label">Analytics — searches so far</div>
+      <div class="stat-row">
+        <div class="stat"><div class="num" id="statTotal">—</div><div class="lbl">Total searches logged</div></div>
+        <div class="stat"><div class="num" id="statUnique">—</div><div class="lbl">Distinct SKUs searched</div></div>
+      </div>
+    </section>
+  </div>
 
-  <section>
-    <div class="section-label">Add a new SKU</div>
-    <div class="card">
-      <div class="row3">
-        <div><label>SKU</label><input type="text" id="newSku" placeholder="e.g. LC1234"></div>
-        <div><label>Description</label><input type="text" id="newDesc" placeholder="e.g. Leisure Chair, Fabric, 800x700x750mm"></div>
-        <div><label>Price (USD)</label><input type="text" id="newPrice" placeholder="e.g. 950 (leave blank if unknown)"></div>
+  <div id="view-mostsearched" class="detail-view" style="display:none;">
+    <button class="logout back-btn" data-back>← Dashboard</button>
+    <section>
+      <div class="section-label">Most searched products</div>
+      <div class="card" id="topSearchesCard">
+        <div class="empty-note">Loading…</div>
       </div>
-      <div class="row3-even">
-        <div><label>Length</label><input type="text" id="newLength" placeholder="e.g. 2760 or 9ft (optional)"></div>
-        <div><label>Width</label><input type="text" id="newWidth" placeholder="e.g. 1760 (optional)"></div>
-        <div><label>Height</label><input type="text" id="newHeight" placeholder="e.g. 820 (optional)"></div>
+    </section>
+  </div>
+
+  <div id="view-rate" class="detail-view" style="display:none;">
+    <button class="logout back-btn" data-back>← Dashboard</button>
+    <section>
+      <div class="section-label">USD → INR rate</div>
+      <div class="card" style="display:flex; align-items:center; gap:16px; flex-wrap:wrap;">
+        <div>1 USD = <b id="rateDisplay">—</b> <span id="rateDateDisplay" style="color:var(--ink-soft); font-family:'IBM Plex Mono', monospace; font-size:11px;"></span></div>
+        <input type="text" id="newRateInput" placeholder="New rate e.g. 95.40" style="max-width:180px; margin-bottom:0;">
+        <button class="primary" id="updateRateBtn">Update rate</button>
+        <span class="status" id="rateStatus"></span>
       </div>
-      <div class="row3-even">
-        <div><label>Unit (for bare numbers above)</label>
-          <select id="newDimUnit"><option value="mm" selected>mm</option><option value="in">in</option><option value="ft">ft</option></select>
+    </section>
+  </div>
+
+  <div id="view-addsku" class="detail-view" style="display:none;">
+    <button class="logout back-btn" data-back>← Dashboard</button>
+    <section>
+      <div class="section-label">Add a new SKU</div>
+      <div class="card">
+        <div class="row3">
+          <div><label>SKU</label><input type="text" id="newSku" placeholder="e.g. LC1234"></div>
+          <div><label>Description</label><input type="text" id="newDesc" placeholder="e.g. Leisure Chair, Fabric, 800x700x750mm"></div>
+          <div><label>Price (USD)</label><input type="text" id="newPrice" placeholder="e.g. 950 (leave blank if unknown)"></div>
         </div>
-        <div><label>Diameter (round items only)</label><input type="text" id="newDiameter" placeholder="leave blank unless round"></div>
-        <div></div>
+        <div class="row3-even">
+          <div><label>Length</label><input type="text" id="newLength" placeholder="e.g. 2760 or 9ft (optional)"></div>
+          <div><label>Width</label><input type="text" id="newWidth" placeholder="e.g. 1760 (optional)"></div>
+          <div><label>Height</label><input type="text" id="newHeight" placeholder="e.g. 820 (optional)"></div>
+        </div>
+        <div class="row3-even">
+          <div><label>Unit (for bare numbers above)</label>
+            <select id="newDimUnit"><option value="mm" selected>mm</option><option value="in">in</option><option value="ft">ft</option></select>
+          </div>
+          <div><label>Diameter (round items only)</label><input type="text" id="newDiameter" placeholder="leave blank unless round"></div>
+          <div></div>
+        </div>
+        <div class="row3-even">
+          <div><label>Material</label><input type="text" id="newMaterial" placeholder="e.g. Leather (optional)"></div>
+          <div><label>Color</label><input type="text" id="newColor" placeholder="e.g. L.Blue (optional)"></div>
+          <div><label>Texture / finish</label><input type="text" id="newTexture" placeholder="e.g. iron powder coated (optional)"></div>
+        </div>
+        <button class="primary" id="addSkuBtn">Add to ledger</button>
+        <span class="status" id="addStatus"></span>
       </div>
-      <div class="row3-even">
-        <div><label>Material</label><input type="text" id="newMaterial" placeholder="e.g. Leather (optional)"></div>
-        <div><label>Color</label><input type="text" id="newColor" placeholder="e.g. L.Blue (optional)"></div>
-        <div><label>Texture / finish</label><input type="text" id="newTexture" placeholder="e.g. iron powder coated (optional)"></div>
-      </div>
-      <button class="primary" id="addSkuBtn">Add to ledger</button>
-      <span class="status" id="addStatus"></span>
-    </div>
-  </section>
+    </section>
 
-  <section>
-    <div class="section-label">Needs a SKU <span id="pendingCountLabel"></span></div>
-    <div class="scroll-table" id="pendingWrap">
-      <table>
-        <thead><tr><th>Description</th><th>USD</th><th>Assign SKU</th></tr></thead>
-        <tbody id="pendingBody"></tbody>
-      </table>
-    </div>
-  </section>
-
-  <section>
-    <div class="section-label">Full ledger <span id="ledgerCountLabel"></span></div>
-    <div class="scroll-table">
-      <table>
-        <thead><tr><th>SKU</th><th>Description</th><th>USD</th><th></th></tr></thead>
-        <tbody id="ledgerBody"></tbody>
-      </table>
-    </div>
-  </section>
-
-  <section>
-    <div class="section-label">Data tools — dimensions &amp; materials</div>
-    <div class="card">
-      <div style="margin-bottom:14px;">
-        <button class="primary" id="parseDimsBtn">Parse dimensions from descriptions</button>
-        <label style="display:inline-block; margin-left:14px;"><input type="checkbox" id="forceReparse" style="width:auto; margin:0 6px 0 0; vertical-align:middle;">Force re-parse all</label>
-        <span class="status" id="parseDimsStatus"></span>
+    <section>
+      <div class="section-label">Needs a SKU <span id="pendingCountLabel"></span></div>
+      <div class="scroll-table" id="pendingWrap">
+        <table>
+          <thead><tr><th>Description</th><th>USD</th><th>Assign SKU</th></tr></thead>
+          <tbody id="pendingBody"></tbody>
+        </table>
       </div>
-      <div id="parseDimsSummary" style="font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--ink-soft);"></div>
-    </div>
-    <div class="card" style="margin-top:14px;">
-      <div>
-        <button class="primary" id="exportCsvBtn">Export material/color/texture review CSV</button>
-        <span class="status" id="exportCsvStatus"></span>
-      </div>
-      <div class="note" style="margin-top:10px;">Downloads a CSV with best-guess material/color/texture per item, parsed from each description. Edit the <code>*_final</code> columns (rows flagged <code>REVIEW</code> need the most attention), then re-import below. Nothing is written to the database until you import.</div>
-    </div>
-    <div class="card" style="margin-top:14px;">
-      <div>
-        <label>Import corrected CSV</label>
-        <input type="file" id="importCsvInput" accept=".csv">
-        <button class="primary" id="importCsvBtn">Import corrected CSV</button>
-      </div>
-      <span class="status" id="importCsvStatus"></span>
-    </div>
-  </section>
+    </section>
+  </div>
 
-  <section>
-    <div class="section-label">Furniture finder</div>
-    <div class="card">
-      <div style="margin-bottom:14px;">
-        <button class="toggle-btn active" id="modeRoomBtn">Room size</button>
-        <button class="toggle-btn" id="modeFurnitureBtn">Furniture size</button>
-        <span style="display:inline-block; margin-left:24px; vertical-align:middle; width:120px;">
-          <label style="margin-bottom:2px;">Unit</label>
-          <select id="finderUnit"><option value="ft" selected>ft</option><option value="in">in</option><option value="mm">mm</option></select>
-        </span>
+  <div id="view-ledger" class="detail-view" style="display:none;">
+    <button class="logout back-btn" data-back>← Dashboard</button>
+    <section>
+      <div class="section-label">Full ledger <span id="ledgerCountLabel"></span></div>
+      <div class="scroll-table">
+        <table>
+          <thead><tr><th>SKU</th><th>Description</th><th>USD</th><th></th></tr></thead>
+          <tbody id="ledgerBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <div id="view-finder" class="detail-view" style="display:none;">
+    <button class="logout back-btn" data-back>← Dashboard</button>
+    <section>
+      <div class="section-label">Data tools — dimensions &amp; materials</div>
+      <div class="card">
+        <div style="margin-bottom:14px;">
+          <button class="primary" id="parseDimsBtn">Parse dimensions from descriptions</button>
+          <label style="display:inline-block; margin-left:14px;"><input type="checkbox" id="forceReparse" style="width:auto; margin:0 6px 0 0; vertical-align:middle;">Force re-parse all</label>
+          <span class="status" id="parseDimsStatus"></span>
+        </div>
+        <div id="parseDimsSummary" style="font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--ink-soft);"></div>
+      </div>
+      <div class="card" style="margin-top:14px;">
+        <div>
+          <button class="primary" id="exportCsvBtn">Export material/color/texture review CSV</button>
+          <span class="status" id="exportCsvStatus"></span>
+        </div>
+        <div class="note" style="margin-top:10px;">Downloads a CSV with best-guess material/color/texture per item, parsed from each description. Edit the <code>*_final</code> columns (rows flagged <code>REVIEW</code> need the most attention), then re-import below. Nothing is written to the database until you import.</div>
+      </div>
+      <div class="card" style="margin-top:14px;">
+        <div>
+          <label>Import corrected CSV</label>
+          <input type="file" id="importCsvInput" accept=".csv">
+          <button class="primary" id="importCsvBtn">Import corrected CSV</button>
+        </div>
+        <span class="status" id="importCsvStatus"></span>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-label">Furniture finder</div>
+      <div class="card">
+        <div style="margin-bottom:14px;">
+          <button class="toggle-btn active" id="modeRoomBtn">Room size</button>
+          <button class="toggle-btn" id="modeFurnitureBtn">Furniture size</button>
+          <span style="display:inline-block; margin-left:24px; vertical-align:middle; width:120px;">
+            <label style="margin-bottom:2px;">Unit</label>
+            <select id="finderUnit"><option value="ft" selected>ft</option><option value="in">in</option><option value="mm">mm</option></select>
+          </span>
+        </div>
+
+        <div id="roomModeInputs" class="row3-even">
+          <div><label>Room length</label><input type="text" id="roomLength" placeholder="e.g. 12ft or 8'6&quot;"></div>
+          <div><label>Room width</label><input type="text" id="roomWidth" placeholder="e.g. 10ft"></div>
+          <div><label>Clearance margin</label><input type="text" id="roomClearance" placeholder="e.g. 2ft" value="2ft"></div>
+        </div>
+
+        <div id="furnitureModeInputs" class="row3-even" style="display:none;">
+          <div><label>Target length</label><input type="text" id="targetLength" placeholder="e.g. 6ft"></div>
+          <div><label>Target width</label><input type="text" id="targetWidth" placeholder="e.g. 3ft"></div>
+          <div><label>Target height</label><input type="text" id="targetHeight" placeholder="optional"></div>
+        </div>
+        <div id="toleranceRow" class="row3-even" style="display:none;">
+          <div><label>Tolerance (%)</label><input type="text" id="targetTolerance" value="10"></div>
+          <div></div>
+          <div></div>
+        </div>
+
+        <div class="section-label" style="margin-top:8px;">Filters</div>
+        <div id="materialFilterWrap" style="margin-bottom:6px;"></div>
+        <div class="row3-even">
+          <div><label>Texture / finish contains</label><input type="text" id="textureQuery" placeholder="e.g. brushed"></div>
+          <div></div>
+          <div></div>
+        </div>
+
+        <button class="primary" id="findBtn">Find matches</button>
+        <span class="status" id="findStatus"></span>
       </div>
 
-      <div id="roomModeInputs" class="row3-even">
-        <div><label>Room length</label><input type="text" id="roomLength" placeholder="e.g. 12ft or 8'6&quot;"></div>
-        <div><label>Room width</label><input type="text" id="roomWidth" placeholder="e.g. 10ft"></div>
-        <div><label>Clearance margin</label><input type="text" id="roomClearance" placeholder="e.g. 2ft" value="2ft"></div>
+      <div class="scroll-table" style="margin-top:14px;">
+        <table>
+          <thead><tr><th>SKU</th><th>Description</th><th>Dimensions</th><th>Material</th><th>Color</th><th>Texture</th><th>USD</th><th>INR</th><th>Fit</th></tr></thead>
+          <tbody id="finderResultsBody"></tbody>
+        </table>
       </div>
-
-      <div id="furnitureModeInputs" class="row3-even" style="display:none;">
-        <div><label>Target length</label><input type="text" id="targetLength" placeholder="e.g. 6ft"></div>
-        <div><label>Target width</label><input type="text" id="targetWidth" placeholder="e.g. 3ft"></div>
-        <div><label>Target height</label><input type="text" id="targetHeight" placeholder="optional"></div>
-      </div>
-      <div id="toleranceRow" class="row3-even" style="display:none;">
-        <div><label>Tolerance (%)</label><input type="text" id="targetTolerance" value="10"></div>
-        <div></div>
-        <div></div>
-      </div>
-
-      <div class="section-label" style="margin-top:8px;">Filters</div>
-      <div id="materialFilterWrap" style="margin-bottom:6px;"></div>
-      <div class="row3-even">
-        <div><label>Texture / finish contains</label><input type="text" id="textureQuery" placeholder="e.g. brushed"></div>
-        <div></div>
-        <div></div>
-      </div>
-
-      <button class="primary" id="findBtn">Find matches</button>
-      <span class="status" id="findStatus"></span>
-    </div>
-
-    <div class="scroll-table" style="margin-top:14px;">
-      <table>
-        <thead><tr><th>SKU</th><th>Description</th><th>Dimensions</th><th>Material</th><th>Color</th><th>Texture</th><th>USD</th><th>INR</th><th>Fit</th></tr></thead>
-        <tbody id="finderResultsBody"></tbody>
-      </table>
-    </div>
-  </section>
+    </section>
+  </div>
 
 </div>
 
@@ -445,6 +517,19 @@ document.getElementById('logoutBtn').addEventListener('click', ()=>{
 });
 if(sessionStorage.getItem('terminal-admin-unlocked') === '1'){ unlock(); }
 
+// ===== Dashboard navigation =====
+function showView(viewId){
+  document.getElementById('viewDashboard').style.display = viewId ? 'none' : '';
+  document.querySelectorAll('.detail-view').forEach(el => { el.style.display = (el.id === viewId) ? '' : 'none'; });
+  window.scrollTo(0, 0);
+}
+document.querySelectorAll('.dash-card').forEach(btn => {
+  btn.addEventListener('click', ()=> showView(btn.getAttribute('data-view')));
+});
+document.querySelectorAll('[data-back]').forEach(btn => {
+  btn.addEventListener('click', ()=> showView(null));
+});
+
 // ===== Data loading =====
 async function loadAll(){
   await Promise.all([loadItems(), loadPending(), loadRate(), loadAnalytics()]);
@@ -455,12 +540,14 @@ async function loadItems(){
   items = data || [];
   renderLedger();
   renderMaterialFilters();
+  document.getElementById('dashLedgerCount').textContent = items.length;
 }
 
 async function loadPending(){
   const { data, error } = await sb.from('pending_items').select('id, description, usd').order('id');
   pending = data || [];
   renderPending();
+  document.getElementById('dashPendingBadge').textContent = pending.length ? pending.length : '0';
 }
 
 async function loadRate(){
@@ -472,6 +559,8 @@ async function loadRate(){
   }
   document.getElementById('rateDisplay').textContent = "₹" + Number(RATE).toFixed(2);
   document.getElementById('rateDateDisplay').textContent = "as of " + RATE_DATE;
+  document.getElementById('dashRateNum').textContent = "₹" + Number(RATE).toFixed(2);
+  document.getElementById('dashRateDate').textContent = "as of " + RATE_DATE;
 }
 
 async function loadAnalytics(){
@@ -484,13 +573,18 @@ async function loadAnalytics(){
     if(error) throw error;
 
     document.getElementById('statTotal').textContent = totalCount ?? 0;
-    document.getElementById('statUnique').textContent = (topRows || []).length
-      ? await getDistinctSkuCount() : 0;
+    const distinctCount = (topRows || []).length ? await getDistinctSkuCount() : 0;
+    document.getElementById('statUnique').textContent = distinctCount;
+
+    document.getElementById('dashTotalSearches').textContent = totalCount ?? 0;
+    document.getElementById('dashDistinctSkus').textContent = distinctCount + (distinctCount === 1 ? " distinct SKU searched" : " distinct SKUs searched");
 
     if(!topRows || !topRows.length){
       card.innerHTML = '<div class="empty-note">No searches logged yet.</div>';
+      document.getElementById('dashTopSku').textContent = '—';
       return;
     }
+    document.getElementById('dashTopSku').textContent = topRows[0].sku;
     const max = topRows[0].search_count;
     card.innerHTML = topRows.map(r => `
       <div class="bar-row">
