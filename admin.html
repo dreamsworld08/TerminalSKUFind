@@ -158,6 +158,14 @@
   .empty-note{ font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--ink-soft); }
   .note{ font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--ink-soft); line-height:1.6; }
 
+  /* Dashboard cards */
+  .dashboard{ display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:12px; margin-bottom:18px; }
+  .card-btn{ background:#FFF; border:1px solid var(--line); padding:14px; text-align:left; cursor:pointer; border-radius:8px; display:flex; flex-direction:column; gap:6px; transition:box-shadow .12s ease; }
+  .card-btn:hover{ box-shadow:0 6px 18px rgba(0,0,0,0.06); }
+  .card-btn .title{ font-weight:700; font-size:15px; color:var(--ink); }
+  .card-btn .sub{ font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--ink-soft); }
+  .card-btn .count{ margin-top:auto; font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--ink-soft); text-align:right; }
+
   details{ margin-top:10px; }
   summary{
     font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:0.08em;
@@ -715,6 +723,35 @@ document.getElementById('addSkuBtn').addEventListener('click', async ()=>{
   document.getElementById('newTexture').value = "";
   await loadItems();
 });
+
+// Dashboard navigation helpers
+function gotoSection(selector){
+  const el = document.querySelector(selector);
+  if(!el){ alert('Section not found.'); return; }
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// Wire dashboard buttons to sections
+document.getElementById('cardRate')?.addEventListener('click', ()=> gotoSection('#newRateInput'));
+document.getElementById('cardAddSku')?.addEventListener('click', ()=> gotoSection('#newSku'));
+// Furniture finder uses existing search counts / top searches as an entry point
+document.getElementById('cardFurniture')?.addEventListener('click', ()=> gotoSection('#topSearchesCard'));
+document.getElementById('cardLedger')?.addEventListener('click', ()=> gotoSection('#ledgerBody'));
+document.getElementById('cardTopSearches')?.addEventListener('click', ()=> gotoSection('#topSearchesCard'));
+document.getElementById('cardAnalytics')?.addEventListener('click', ()=> gotoSection('#statTotal'));
+
+function refreshDashboardCounts(){
+  const el = document.getElementById('cardLedgerCount');
+  if(el) el.textContent = '(' + (items.length || 0) + ')';
+}
+
+// Wrap loadAll to update dashboard counts after data load
+const _origLoadAll = loadAll;
+loadAll = async function(){
+  await _origLoadAll();
+  refreshDashboardCounts();
+};
+
 
 // ===== Data tools: dimension backfill =====
 document.getElementById('parseDimsBtn').addEventListener('click', async ()=>{
