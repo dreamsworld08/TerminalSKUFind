@@ -216,8 +216,16 @@
     background:var(--surface-2); border-radius:var(--radius-pill);
     padding:7px 14px; display:inline-block;
   }
-  .variant-item{ padding:18px 0; border-bottom:1px solid var(--border); }
+  .product-photo{
+    display:block; width:100%; max-height:340px; object-fit:cover;
+    border-radius:var(--radius-md); background:var(--surface-2); margin-bottom:18px;
+  }
+  .product-photo.is-small{
+    flex:none; width:110px; height:88px; margin-bottom:0; border-radius:var(--radius-sm);
+  }
+  .variant-item{ padding:18px 0; border-bottom:1px solid var(--border); display:flex; gap:16px; align-items:flex-start; }
   .variant-item:last-child{ border-bottom:none; }
+  .variant-body{ flex:1; min-width:0; }
   .variant-item .desc{
     font-family:var(--font-display); font-size:16px; font-weight:600; margin:0 0 10px;
   }
@@ -337,6 +345,13 @@ let items = [];
 let RATE = 95.40;
 let RATE_DATE = "—";
 
+const IMAGE_BUCKET = 'product-images';
+function imageUrl(it){
+  if(!it || !it.image_path) return null;
+  const stamp = it.image_updated_at ? '?v=' + Date.parse(it.image_updated_at) : '';
+  return SUPABASE_URL + '/storage/v1/object/public/' + IMAGE_BUCKET + '/' + it.image_path + stamp;
+}
+
 function fmtINR(n){
   if(n === null || n === undefined || isNaN(n)) return "—";
   return "₹" + Math.round(n).toLocaleString('en-IN');
@@ -345,10 +360,15 @@ function fmtINR(n){
 async function loadAll(){
   const loadingNote = document.getElementById('loadingNote');
   try{
-    const [{ data: itemRows, error: itemErr }, { data: rateRow, error: rateErr }] = await Promise.all([
-      sb.from('items').select('sku, description, usd'),
+    let [{ data: itemRows, error: itemErr }, { data: rateRow, error: rateErr }] = await Promise.all([
+      sb.from('items').select('sku, description, usd, image_path, image_updated_at'),
       sb.from('settings').select('value').eq('key', 'usd_inr_rate').maybeSingle()
     ]);
+    // Photos are optional. If the image migration hasn't run, fall back to the
+    // text columns rather than failing the customer-facing search outright.
+    if(itemErr && /image_path|image_updated_at/.test(itemErr.message || '')){
+      ({ data: itemRows, error: itemErr } = await sb.from('items').select('sku, description, usd'));
+    }
     if(itemErr) throw itemErr;
     items = itemRows || [];
 
@@ -375,6 +395,12 @@ function showResult(matches){
   document.getElementById('rSku').textContent = matches[0].sku;
   const body = document.getElementById('resultBody');
 
+  function photoBlock(item, small){
+    const url = imageUrl(item);
+    if(!url) return '';
+    return `<img class="product-photo${small ? ' is-small' : ''}" src="${url}" alt="${item.sku}" loading="lazy">`;
+  }
+
   function priceBlock(item, small){
     if(typeof item.usd !== 'number'){
       return `<div class="price-row"><div class="usd-price" style="color:var(--stamp)">No price entered yet for this SKU</div></div>`;
@@ -387,13 +413,17 @@ function showResult(matches){
 
   if(matches.length === 1){
     const item = matches[0];
-    body.innerHTML = `<div class="desc">${item.description}</div>` + priceBlock(item, false);
+    body.innerHTML = photoBlock(item, false) +
+      `<div class="desc">${item.description}</div>` + priceBlock(item, false);
   }else{
     body.innerHTML = `<div class="variant-note">${matches.length} variants found for this SKU — price differs by combination/colour</div>` +
       matches.map(item=>`
         <div class="variant-item">
-          <div class="desc">${item.description}</div>
-          ${priceBlock(item, true)}
+          ${photoBlock(item, true)}
+          <div class="variant-body">
+            <div class="desc">${item.description}</div>
+            ${priceBlock(item, true)}
+          </div>
         </div>`).join("");
   }
 }

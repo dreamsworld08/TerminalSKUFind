@@ -437,6 +437,12 @@
     justify-content:center; font-family:var(--font-mono); font-size:12px; font-weight:700;
     background:color-mix(in srgb, var(--accent) 16%, transparent); color:var(--accent);
   }
+  /* shared thumbnail used by suggestions, AI picks and the ledger */
+  .thumb{
+    flex:none; width:56px; height:56px; border-radius:var(--radius-sm); object-fit:cover;
+    background:var(--surface-3); display:block;
+  }
+  .thumb-sm{ width:40px; height:40px; border-radius:9px; }
   .sg-body{ min-width:0; flex:1; }
   .sg-top{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; }
   .sg-name{ font-family:var(--font-display); font-weight:600; font-size:14.5px; line-height:1.3; }
@@ -464,6 +470,53 @@
   .sg-warn{ margin-top:10px; font-size:11.5px; color:var(--warn); }
   @media (prefers-color-scheme: dark){ .fit-chip.is-good{ color:#DCEB9A; } }
   :root[data-theme="dark"] .fit-chip.is-good{ color:#DCEB9A; }
+
+  /* ===== Product images ===== */
+  .img-cover{ display:flex; align-items:center; gap:18px; flex-wrap:wrap; }
+  .img-cover-num{ font-family:var(--font-mono); font-size:30px; font-weight:700; line-height:1; }
+  .img-cover-bar{ flex:1; min-width:180px; height:9px; border-radius:var(--radius-pill); background:var(--surface-3); overflow:hidden; }
+  .img-cover-fill{ height:100%; width:0%; border-radius:var(--radius-pill); background:var(--accent); transition:width .4s ease; }
+  .img-cover-lbl{ font-size:12.5px; color:var(--text-muted); }
+
+  .drop-zone{
+    margin-top:14px; border:1.5px dashed var(--border-strong); border-radius:var(--radius-md);
+    padding:26px; text-align:center; cursor:pointer; color:var(--text-muted);
+    transition:border-color .15s ease, background .15s ease, color .15s ease;
+  }
+  .drop-zone:hover, .drop-zone.is-over{ border-color:var(--accent); color:var(--accent); background:color-mix(in srgb, var(--accent) 6%, transparent); }
+  .drop-inner{ display:flex; flex-direction:column; align-items:center; gap:9px; font-size:13px; }
+  .bulk-report{ margin-top:14px; font-size:12.5px; }
+  .bulk-line{ display:flex; gap:10px; padding:6px 0; border-bottom:1px solid var(--border); align-items:baseline; }
+  .bulk-line:last-child{ border-bottom:none; }
+  .bulk-file{ font-family:var(--font-mono); font-size:11.5px; min-width:150px; color:var(--text-muted); }
+  .bulk-ok{ color:var(--good); font-weight:600; }
+  .bulk-warn{ color:var(--warn); font-weight:600; }
+  .bulk-bad{ color:var(--accent); font-weight:600; }
+
+  .img-grid{ display:grid; grid-template-columns:repeat(auto-fill, minmax(210px,1fr)); gap:14px; }
+  .img-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius-md);
+    overflow:hidden; display:flex; flex-direction:column;
+  }
+  .img-thumb{
+    aspect-ratio:4/3; background:var(--surface-3); display:flex; align-items:center; justify-content:center;
+    overflow:hidden; position:relative;
+  }
+  .img-thumb img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .img-thumb .img-none{ font-size:11.5px; color:var(--text-muted); }
+  .img-meta{ padding:12px 14px; flex:1; display:flex; flex-direction:column; gap:3px; }
+  .img-sku{ font-family:var(--font-mono); font-size:11.5px; font-weight:600; }
+  .img-desc{ font-size:12px; color:var(--text-muted); line-height:1.45;
+    display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .img-variants{ font-size:10.5px; color:var(--warn); font-weight:600; margin-top:2px; }
+  .img-actions{ display:flex; gap:8px; padding:0 14px 14px; }
+  .img-btn{
+    flex:1; font-family:var(--font-body); font-size:11.5px; font-weight:600; cursor:pointer;
+    border:1px solid var(--border); background:var(--surface-2); color:var(--text-muted);
+    padding:8px 10px; border-radius:var(--radius-sm); text-align:center;
+  }
+  .img-btn:hover{ color:var(--accent); border-color:var(--accent); }
+  .img-btn.is-danger:hover{ color:var(--stamp, var(--accent)); }
 
   /* ===== AI designer ===== */
   .ai-card{ border-color:color-mix(in srgb, var(--accent) 30%, var(--border)); }
@@ -571,6 +624,9 @@
       </button>
       <button class="rail-btn" data-nav="view-addsku" title="Add a SKU" aria-label="Add a SKU">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 5.5v13M5.5 12h13" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+      </button>
+      <button class="rail-btn" data-nav="view-images" title="Product photos" aria-label="Product photos">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><rect x="3.5" y="5" width="17" height="14" rx="2.5" stroke="currentColor" stroke-width="1.8"/><circle cx="8.5" cy="10" r="1.6" stroke="currentColor" stroke-width="1.6"/><path d="m4.5 17 4.5-4.5 3.5 3.5 3-2.5 4 3.5" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
       </button>
       <button class="rail-btn" data-nav="view-rate" title="USD to INR rate" aria-label="USD to INR rate">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M7.5 5.5h9M7.5 9.5h9M14 5.5c0 4-2.5 4-6.5 4l7 9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
@@ -690,6 +746,14 @@
           <div class="dash-go">Open →</div>
         </button>
 
+        <!-- Product photos -->
+        <button class="dash-card span-4" data-view="view-images">
+          <div class="dash-num tabular" id="dashImageCount">—</div>
+          <div class="dash-title">Product photos</div>
+          <div class="dash-desc">Upload a photo per piece. Name files after the SKU to match a whole folder at once.</div>
+          <div class="dash-go">Manage photos →</div>
+        </button>
+
         <!-- Full ledger -->
         <button class="dash-card span-4" data-view="view-ledger">
           <div class="dash-num tabular" id="dashLedgerCount">—</div>
@@ -764,10 +828,61 @@
       <div class="section-label">Full ledger <span id="ledgerCountLabel"></span></div>
       <div class="scroll-table">
         <table>
-          <thead><tr><th>SKU</th><th>Description</th><th>USD</th><th></th></tr></thead>
+          <thead><tr><th></th><th>SKU</th><th>Description</th><th>USD</th><th></th></tr></thead>
           <tbody id="ledgerBody"></tbody>
         </table>
       </div>
+    </section>
+  </div>
+
+  <div id="view-images" class="detail-view" style="display:none;">
+    <button class="logout back-btn" data-back>← Dashboard</button>
+
+    <section>
+      <div class="section-label">Photo coverage</div>
+      <div class="card">
+        <div class="img-cover">
+          <div class="img-cover-num tabular" id="imgCoverNum">—</div>
+          <div class="img-cover-bar"><div class="img-cover-fill" id="imgCoverFill"></div></div>
+          <div class="img-cover-lbl" id="imgCoverLbl">Loading…</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-label">Bulk upload — name each file after its SKU</div>
+      <div class="card">
+        <div class="note">Drop or choose many photos at once. Each file is matched to a SKU by its filename, so
+          <code>T301.jpg</code> lands on SKU T301. Photos are resized to 1600px and saved as JPEG before upload,
+          which keeps 185 pieces well inside your storage allowance.</div>
+        <div id="dropZone" class="drop-zone">
+          <input type="file" id="bulkFiles" accept="image/*" multiple hidden>
+          <div class="drop-inner">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+              <path d="M4 15v3.5A1.5 1.5 0 0 0 5.5 20h13a1.5 1.5 0 0 0 1.5-1.5V15" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+            </svg>
+            <div><b>Drop photos here</b> or click to choose</div>
+          </div>
+        </div>
+        <div id="bulkReport" class="bulk-report"></div>
+        <div id="bulkActions" style="display:none; margin-top:14px;">
+          <button class="primary" id="bulkUploadBtn">Upload matched photos</button>
+          <span class="status" id="bulkStatus"></span>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="section-label">
+        Catalogue
+        <span style="text-transform:none; letter-spacing:0; font-weight:400; margin-left:10px;">
+          <button class="toggle-btn is-active" data-imgfilter="missing">Needs a photo</button>
+          <button class="toggle-btn" data-imgfilter="has">Has a photo</button>
+          <button class="toggle-btn" data-imgfilter="all">All</button>
+        </span>
+      </div>
+      <div id="imageGrid" class="img-grid"><div class="empty-note">Loading…</div></div>
     </section>
   </div>
 
@@ -1267,8 +1382,20 @@ async function loadAll(){
   loadWeather();
 }
 
+const ITEM_COLS_BASE = 'id, sku, description, usd, length_mm, width_mm, height_mm, diameter_mm, dimension_sets, dimension_parse_status, dimension_raw, material, color, texture, material_review_status';
+const ITEM_COLS_IMAGES = ITEM_COLS_BASE + ', image_path, image_updated_at';
+let imagesReady = true;
+
 async function loadItems(){
-  const { data, error } = await sb.from('items').select('id, sku, description, usd, length_mm, width_mm, height_mm, diameter_mm, dimension_sets, dimension_parse_status, dimension_raw, material, color, texture, material_review_status').order('sku');
+  let { data, error } = await sb.from('items').select(ITEM_COLS_IMAGES).order('sku');
+  // If the image migration hasn't been run, fall back rather than taking the
+  // whole page down over two missing columns.
+  if(error && /image_path|image_updated_at/.test(error.message || '')){
+    imagesReady = false;
+    ({ data } = await sb.from('items').select(ITEM_COLS_BASE).order('sku'));
+  } else if(!error){
+    imagesReady = true;
+  }
   items = data || [];
   // Enrich in memory: furniture type and materials are read straight from the
   // description, so the finder works without waiting on the CSV review pass.
@@ -1280,6 +1407,7 @@ async function loadItems(){
   renderLedger();
   renderMaterialFilters();
   renderTypeFilter();
+  refreshImages();
   document.getElementById('dashLedgerCount').textContent = items.length;
 }
 
@@ -1495,14 +1623,16 @@ function renderLedger(filter){
   const body = document.getElementById('ledgerBody');
   body.innerHTML = "";
   if(!rows.length){
-    body.innerHTML = '<tr><td colspan="4" class="empty-note">No SKU matches “' + esc(raw) + '”.</td></tr>';
+    body.innerHTML = '<tr><td colspan="5" class="empty-note">No SKU matches “' + esc(raw) + '”.</td></tr>';
     return;
   }
   rows.forEach(it=>{
     const tr = document.createElement('tr');
     const hasPrice = typeof it.usd === 'number';
     const usdText = hasPrice ? "$" + it.usd : "— needs price";
-    tr.innerHTML = `<td>${it.sku}</td><td class="desc-cell">${it.description}</td><td>${usdText}</td>
+    const thumb = imageUrl(it)
+      ? `<img class="thumb thumb-sm" src="${esc(imageUrl(it))}" alt="" loading="lazy">` : '';
+    tr.innerHTML = `<td>${thumb}</td><td>${it.sku}</td><td class="desc-cell">${it.description}</td><td>${usdText}</td>
       <td><button class="del-btn" data-id="${it.id}">Delete</button></td>`;
     body.appendChild(tr);
   });
@@ -1856,6 +1986,7 @@ function renderSuggestions(top, reasonsFor, headline, unit, isRoomMode){
     return '' +
       '<article class="sg-card">' +
         '<div class="sg-rank">' + (i + 1) + '</div>' +
+        (imageUrl(it) ? '<img class="thumb" src="' + esc(imageUrl(it)) + '" alt="" loading="lazy">' : '') +
         '<div class="sg-body">' +
           '<div class="sg-top">' +
             '<div>' +
@@ -1909,6 +2040,284 @@ function renderFinderResults(results, unit, isRoomMode){
 }
 
 document.getElementById('findBtn').addEventListener('click', runSuggest);
+
+// ===== Product images =====
+// One photo per VARIANT row. A SKU can cover different pieces entirely —
+// 2A06 is both a 1-seat chair and a 4-seat corner sofa — so the image is keyed
+// on items.id, never on the SKU.
+const IMAGE_BUCKET = 'product-images';
+const IMAGE_MAX_EDGE = 1600;
+const IMAGE_QUALITY = 0.82;
+
+function imageUrl(it){
+  if(!it || !it.image_path) return null;
+  const stamp = it.image_updated_at ? '?v=' + Date.parse(it.image_updated_at) : '';
+  return SUPABASE_URL + '/storage/v1/object/public/' + IMAGE_BUCKET + '/' + it.image_path + stamp;
+}
+
+// Downscale in the browser before upload. Straight from a camera these run
+// 5-8MB each; 185 of those would exceed the storage allowance on their own.
+function downscale(file){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width: w, height: h } = img;
+      const scale = Math.min(1, IMAGE_MAX_EDGE / Math.max(w, h));
+      w = Math.round(w * scale); h = Math.round(h * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff';           // flatten transparency; JPEG has no alpha
+      ctx.fillRect(0, 0, w, h);
+      ctx.drawImage(img, 0, 0, w, h);
+      canvas.toBlob(b => b ? resolve(b) : reject(new Error('Could not encode image')), 'image/jpeg', IMAGE_QUALITY);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Not a readable image')); };
+    img.src = url;
+  });
+}
+
+async function uploadImageFor(item, file){
+  const blob = await downscale(file);
+  const path = 'items/' + item.id + '-' + Date.now() + '.jpg';
+  const previous = item.image_path;
+
+  const { error: upErr } = await sb.storage.from(IMAGE_BUCKET)
+    .upload(path, blob, { contentType: 'image/jpeg', upsert: true });
+  if(upErr) throw new Error(upErr.message);
+
+  const { error: dbErr } = await sb.from('items')
+    .update({ image_path: path, image_updated_at: new Date().toISOString() })
+    .eq('id', item.id);
+  if(dbErr) throw new Error(dbErr.message);
+
+  // Only bin the old file once the row points at the new one.
+  if(previous && previous !== path){
+    sb.storage.from(IMAGE_BUCKET).remove([previous]).catch(()=>{});
+  }
+  return path;
+}
+
+async function removeImageFor(item){
+  const path = item.image_path;
+  const { error } = await sb.from('items')
+    .update({ image_path: null, image_updated_at: null }).eq('id', item.id);
+  if(error) throw new Error(error.message);
+  if(path) sb.storage.from(IMAGE_BUCKET).remove([path]).catch(()=>{});
+}
+
+// ----- coverage + grid -----
+let imgFilter = 'missing';
+
+function renderImageCoverage(){
+  const withImg = items.filter(i => i.image_path).length;
+  const pct = items.length ? Math.round(withImg / items.length * 100) : 0;
+  const numEl = document.getElementById('imgCoverNum');
+  if(numEl){
+    numEl.textContent = withImg + ' / ' + items.length;
+    document.getElementById('imgCoverFill').style.width = pct + '%';
+    document.getElementById('imgCoverLbl').textContent =
+      pct + '% of the catalogue has a photo' + (withImg < items.length ? ' · ' + (items.length - withImg) + ' still to go' : ' · complete');
+  }
+  const dash = document.getElementById('dashImageCount');
+  if(dash) dash.textContent = withImg + '/' + items.length;
+}
+
+function siblingsOf(item){
+  return items.filter(i => String(i.sku).toUpperCase() === String(item.sku).toUpperCase() && i.id !== item.id);
+}
+
+function renderImageGrid(){
+  const grid = document.getElementById('imageGrid');
+  if(!grid) return;
+  if(!imagesReady){
+    grid.innerHTML = '<div class="ai-setup"><b>Photo storage isn\'t set up yet.</b><br>' +
+      'Run <code>migration_product_images.sql</code> once in the Supabase SQL Editor. It adds two columns ' +
+      'to <code>items</code> and creates the public <code>product-images</code> bucket. ' +
+      'Everything else on this page keeps working in the meantime.</div>';
+    return;
+  }
+  const rows = items.filter(i =>
+    imgFilter === 'all' ? true : imgFilter === 'has' ? !!i.image_path : !i.image_path);
+
+  if(!rows.length){
+    grid.innerHTML = '<div class="empty-note">' +
+      (imgFilter === 'missing' ? 'Every piece has a photo.' : 'Nothing here yet.') + '</div>';
+    return;
+  }
+
+  grid.innerHTML = rows.map(it => {
+    const url = imageUrl(it);
+    const sibs = siblingsOf(it).length;
+    return '' +
+      '<div class="img-card" data-id="' + it.id + '">' +
+        '<div class="img-thumb">' +
+          (url ? '<img src="' + esc(url) + '" alt="' + esc(it.sku) + '" loading="lazy">'
+               : '<span class="img-none">No photo</span>') +
+        '</div>' +
+        '<div class="img-meta">' +
+          '<div class="img-sku">' + esc(it.sku) + '</div>' +
+          '<div class="img-desc">' + esc(it.description) + '</div>' +
+          (sibs ? '<div class="img-variants">' + sibs + ' other variant' + (sibs === 1 ? '' : 's') + ' share this SKU</div>' : '') +
+        '</div>' +
+        '<div class="img-actions">' +
+          '<button class="img-btn" data-act="pick" data-id="' + it.id + '">' + (url ? 'Replace' : 'Upload') + '</button>' +
+          (url ? '<button class="img-btn is-danger" data-act="del" data-id="' + it.id + '">Remove</button>' : '') +
+        '</div>' +
+      '</div>';
+  }).join('');
+}
+
+function refreshImages(){ renderImageCoverage(); renderImageGrid(); }
+
+document.querySelectorAll('[data-imgfilter]').forEach(btn => {
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('[data-imgfilter]').forEach(b => b.classList.remove('is-active'));
+    btn.classList.add('is-active');
+    imgFilter = btn.getAttribute('data-imgfilter');
+    renderImageGrid();
+  });
+});
+
+// Single hidden picker reused by every card.
+const singlePicker = document.createElement('input');
+singlePicker.type = 'file'; singlePicker.accept = 'image/*'; singlePicker.hidden = true;
+document.body.appendChild(singlePicker);
+let pickTargetId = null;
+
+document.getElementById('imageGrid').addEventListener('click', async (e)=>{
+  const btn = e.target.closest('[data-act]');
+  if(!btn) return;
+  const item = items.find(i => String(i.id) === btn.getAttribute('data-id'));
+  if(!item) return;
+
+  if(btn.getAttribute('data-act') === 'pick'){
+    pickTargetId = item.id;
+    singlePicker.value = '';
+    singlePicker.click();
+  } else {
+    if(!confirm('Remove the photo for ' + item.sku + '?')) return;
+    btn.textContent = 'Removing…';
+    try{ await removeImageFor(item); await loadItems(); refreshImages(); }
+    catch(err){ alert('Could not remove: ' + err.message); }
+  }
+});
+
+singlePicker.addEventListener('change', async ()=>{
+  const file = singlePicker.files && singlePicker.files[0];
+  const item = items.find(i => i.id === pickTargetId);
+  if(!file || !item) return;
+  const card = document.querySelector('.img-card[data-id="' + item.id + '"] .img-thumb');
+  if(card) card.innerHTML = '<span class="img-none">Uploading…</span>';
+  try{
+    await uploadImageFor(item, file);
+    const sibs = siblingsOf(item);
+    if(sibs.length && confirm('Apply this photo to the ' + sibs.length + ' other variant' +
+        (sibs.length === 1 ? '' : 's') + ' of ' + item.sku + ' too?\n\nOnly do this if they look the same — ' +
+        'variants often differ in colour, material or size.')){
+      for(const s of sibs){ await uploadImageFor(s, file); }
+    }
+    await loadItems(); refreshImages();
+  }catch(err){
+    alert('Upload failed: ' + err.message);
+    refreshImages();
+  }
+});
+
+// ----- bulk upload, matched on filename -----
+let bulkMatches = [];
+
+// SKUs contain spaces and '#' ("PIANO SOFA", "22034#"), and real photo files
+// arrive as "ES 2418_final.JPG" or "T301-front (2).jpg". Compare on
+// alphanumerics only, then allow a prefix match so trailing junk is tolerated.
+function normKey(s){ return String(s == null ? '' : s).toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+
+function skuFromFilename(name){
+  return normKey(String(name).replace(/\.[^.]+$/, ''));
+}
+
+function matchItemsForFile(filename){
+  const key = skuFromFilename(filename);
+  if(!key) return { hits: [], how: 'none' };
+
+  const exact = items.filter(i => normKey(i.sku) === key);
+  if(exact.length) return { hits: exact, how: 'exact' };
+
+  // Longest SKU first, so "T301" wins over a hypothetical "T30".
+  const skus = [...new Set(items.map(i => normKey(i.sku)))]
+    .filter(s => s.length >= 3)
+    .sort((a, b) => b.length - a.length);
+  const found = skus.find(s => key.startsWith(s));
+  if(found) return { hits: items.filter(i => normKey(i.sku) === found), how: 'prefix' };
+
+  return { hits: [], how: 'none' };
+}
+
+function planBulk(files){
+  const report = document.getElementById('bulkReport');
+  bulkMatches = [];
+  const lines = [];
+
+  Array.from(files).forEach(file => {
+    const { hits } = matchItemsForFile(file.name);
+    if(!hits.length){
+      lines.push('<div class="bulk-line"><span class="bulk-file">' + esc(file.name) +
+        '</span><span class="bulk-bad">no SKU matches</span></div>');
+    } else if(hits.length === 1){
+      bulkMatches.push({ file, item: hits[0] });
+      lines.push('<div class="bulk-line"><span class="bulk-file">' + esc(file.name) +
+        '</span><span class="bulk-ok">→ ' + esc(hits[0].sku) + '</span><span style="color:var(--text-muted)">' +
+        esc(productName(hits[0].description)) + '</span></div>');
+    } else {
+      hits.forEach(h => bulkMatches.push({ file, item: h }));
+      lines.push('<div class="bulk-line"><span class="bulk-file">' + esc(file.name) +
+        '</span><span class="bulk-warn">→ ' + esc(hits[0].sku) + ' has ' + hits.length +
+        ' variants — the same photo will go on all of them; set them individually below if they differ</span></div>');
+    }
+  });
+
+  report.innerHTML = lines.join('') ||
+    '<div class="empty-note">No image files found.</div>';
+  document.getElementById('bulkActions').style.display = bulkMatches.length ? '' : 'none';
+  document.getElementById('bulkStatus').textContent =
+    bulkMatches.length ? bulkMatches.length + ' photo assignment(s) ready' : '';
+}
+
+const dropZone = document.getElementById('dropZone');
+const bulkInput = document.getElementById('bulkFiles');
+dropZone.addEventListener('click', ()=> bulkInput.click());
+bulkInput.addEventListener('change', ()=> planBulk(bulkInput.files));
+['dragenter','dragover'].forEach(ev => dropZone.addEventListener(ev, e => {
+  e.preventDefault(); dropZone.classList.add('is-over');
+}));
+['dragleave','drop'].forEach(ev => dropZone.addEventListener(ev, e => {
+  e.preventDefault(); dropZone.classList.remove('is-over');
+}));
+dropZone.addEventListener('drop', e => {
+  const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+  planBulk(files);
+});
+
+document.getElementById('bulkUploadBtn').addEventListener('click', async ()=>{
+  const statusEl = document.getElementById('bulkStatus');
+  const btn = document.getElementById('bulkUploadBtn');
+  btn.disabled = true;
+  let ok = 0, fail = 0;
+  for(let i = 0; i < bulkMatches.length; i++){
+    const m = bulkMatches[i];
+    statusEl.textContent = 'Uploading ' + (i + 1) + ' of ' + bulkMatches.length + '…';
+    try{ await uploadImageFor(m.item, m.file); ok++; }
+    catch(err){ fail++; }
+  }
+  statusEl.textContent = 'Done. ' + ok + ' uploaded' + (fail ? ', ' + fail + ' failed' : '') + '.';
+  btn.disabled = false;
+  bulkMatches = [];
+  document.getElementById('bulkActions').style.display = 'none';
+  await loadItems();
+  refreshImages();
+});
 
 // ===== AI designer =====
 // The OpenRouter key lives only in the Supabase Edge Function. This page holds
@@ -2026,6 +2435,7 @@ document.getElementById('aiBtn').addEventListener('click', async ()=>{
       '<div class="ai-picks">' + picks.map(({p, it}) =>
         '<div class="ai-pick">' +
           '<div class="ai-role">' + esc(p.role || 'piece') + '</div>' +
+          (imageUrl(it) ? '<img class="thumb" src="' + esc(imageUrl(it)) + '" alt="" loading="lazy">' : '') +
           '<div class="ai-pick-body">' +
             '<div class="ai-pick-name">' + esc(productName(it.description)) + '</div>' +
             '<div class="ai-pick-sku">' + esc(it.sku) + ' · ' + esc(it._type) + '</div>' +
