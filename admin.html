@@ -1348,7 +1348,17 @@ document.getElementById('logoutBtn').addEventListener('click', ()=>{
   sessionStorage.removeItem('terminal-admin-unlocked');
   location.reload();
 });
-if(sessionStorage.getItem('terminal-admin-unlocked') === '1'){ unlock(); }
+if(sessionStorage.getItem('terminal-admin-unlocked') === '1'){
+  // Deferred one tick so this runs after the rest of the script has finished
+  // executing - matching a real button click, which can only ever happen
+  // after the whole file has already run once. Calling unlock() synchronously
+  // here, on a fresh page load, ran before later `const` declarations further
+  // down the file (ITEM_COLS_IMAGES, used by loadItems()) had executed, which
+  // threw a ReferenceError on every refresh and silently killed the catalogue
+  // fetch - the ledger, photos and weather never loaded until you manually
+  // clicked Lock and unlocked again.
+  setTimeout(unlock, 0);
+}
 
 // ===== Dashboard navigation =====
 function showView(viewId){
