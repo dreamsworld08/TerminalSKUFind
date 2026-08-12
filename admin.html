@@ -999,6 +999,10 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let items = [];
 let pending = [];
+// Until the first fetch lands, an empty catalogue means "still loading", not
+// "no such product". Reporting those as the same thing made the ledger claim a
+// SKU didn't exist when it simply hadn't arrived yet.
+let catalogueLoaded = false;
 let RATE = 95.40;
 let RATE_DATE = "—";
 
@@ -1404,6 +1408,7 @@ async function loadItems(){
     it._mats = effectiveMaterials(it);
     it._inr  = (typeof it.usd === 'number') ? it.usd * RATE : null;
   });
+  catalogueLoaded = true;
   renderLedger();
   renderMaterialFilters();
   renderTypeFilter();
@@ -1619,9 +1624,13 @@ function renderLedger(filter){
     : items;
 
   document.getElementById('ledgerCountLabel').textContent =
-    q ? "(" + rows.length + " of " + items.length + ")" : "(" + items.length + ")";
+    !catalogueLoaded ? "" : q ? "(" + rows.length + " of " + items.length + ")" : "(" + items.length + ")";
   const body = document.getElementById('ledgerBody');
   body.innerHTML = "";
+  if(!catalogueLoaded){
+    body.innerHTML = '<tr><td colspan="5" class="empty-note">Loading the catalogue…</td></tr>';
+    return;
+  }
   if(!rows.length){
     body.innerHTML = '<tr><td colspan="5" class="empty-note">No SKU matches “' + esc(raw) + '”.</td></tr>';
     return;
@@ -1913,6 +1922,7 @@ const SUGGEST_N = 5;
 
 function runSuggest(){
   const statusEl = document.getElementById('findStatus');
+  if(!catalogueLoaded){ statusEl.textContent = 'Still loading the catalogue — try again in a moment.'; return; }
   const unit = document.getElementById('finderUnit').value;
   const isRoomMode = document.getElementById('modeRoomBtn').classList.contains('active');
   const typeFilter = document.getElementById('typeFilter').value;
@@ -2132,6 +2142,10 @@ function siblingsOf(item){
 function renderImageGrid(){
   const grid = document.getElementById('imageGrid');
   if(!grid) return;
+  if(!catalogueLoaded){
+    grid.innerHTML = '<div class="empty-note">Loading the catalogue…</div>';
+    return;
+  }
   if(!imagesReady){
     grid.innerHTML = '<div class="ai-setup"><b>Photo storage isn\'t set up yet.</b><br>' +
       'Run <code>migration_product_images.sql</code> once in the Supabase SQL Editor. It adds two columns ' +
@@ -2390,6 +2404,7 @@ function renderAiSetupHelp(detail){
 document.getElementById('aiBtn').addEventListener('click', async ()=>{
   const statusEl = document.getElementById('aiStatus');
   const out = document.getElementById('aiResult');
+  if(!catalogueLoaded){ statusEl.textContent = 'Still loading the catalogue — try again in a moment.'; return; }
   const brief = document.getElementById('aiBrief').value.trim();
 
   const shortlist = currentShortlist(24);
