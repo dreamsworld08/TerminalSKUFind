@@ -260,8 +260,42 @@
 <script>
 // ===== Supabase connection =====
 const SUPABASE_URL = "https://irbzgfmcmrvrylvugeee.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlyYnpnZm1jbXJ2cnlsdnVnZWVlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3MzgzMzcsImV4cCI6MjEwMTMxNDMzN30.24WVsRMz-WnYK85glO4b69l_KUD84r1sI8Ft-moHFv8";
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let SUPABASE_ANON_KEY = "******";
+// Create client now (may be placeholder). If the user supplies a real anon key via the in-page prompt
+// we'll recreate `sb` and reload catalog automatically.
+let sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+(function ensureAnonKeyAvailable(){
+  try{
+    const stored = sessionStorage.getItem('SUPABASE_ANON_KEY');
+    if(stored && SUPABASE_ANON_KEY === '******'){
+      SUPABASE_ANON_KEY = stored;
+      sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    }
+  }catch(e){}
+
+  if(SUPABASE_ANON_KEY === '******'){
+    // show lightweight floating prompt so admin can paste a publishable anon key in browser
+    const banner = document.createElement('div');
+    banner.style = 'position:fixed;right:12px;bottom:12px;z-index:9999;background:#111;color:#fff;padding:12px;border-radius:8px;font-family:monospace;font-size:13px;box-shadow:0 6px 18px rgba(0,0,0,.4)';
+    banner.innerHTML = '<div style="margin-bottom:6px;font-weight:600">Supabase anon key required</div>' +
+      '<input id="_sb_key_input" placeholder="paste anon key" style="width:320px;padding:6px;border-radius:6px;border:1px solid #333;background:#000;color:#fff;margin-bottom:6px">' +
+      '<div><button id="_sb_key_save" style="padding:6px 10px;border-radius:6px;background:#ffcc00;border:none;color:#000;font-weight:600;margin-right:8px">Save (session)</button>' +
+      '<button id="_sb_key_close" style="padding:6px 10px;border-radius:6px;background:#333;border:none;color:#fff">Close</button></div>';
+    document.body.appendChild(banner);
+    document.getElementById('_sb_key_save').addEventListener('click', ()=>{
+      const v = document.getElementById('_sb_key_input').value.trim();
+      if(!v) return alert('Please paste the anon (publishable) key');
+      try{ sessionStorage.setItem('SUPABASE_ANON_KEY', v); }catch(e){}
+      SUPABASE_ANON_KEY = v;
+      sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      banner.remove();
+      // reload live data
+      if(typeof loadImageHashes === 'function') loadImageHashes();
+      if(typeof loadAll === 'function') loadAll();
+    });
+    document.getElementById('_sb_key_close').addEventListener('click', ()=>banner.remove());
+  }
+})();
 
 let items = [];
 let RATE = 95.40;

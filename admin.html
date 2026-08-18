@@ -354,8 +354,16 @@
 <script>
 const ADMIN_PASSCODE = "081191";
 const SUPABASE_URL = "https://irbzgfmcmrvrylvugeee.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlyYnpnZm1jbXJ2cnlsdnVnZWVlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODU3MzgzMzcsImV4cCI6MjEwMTMxNDMzN30.24WVsRMz-WnYK85glO4b69l_KUD84r1sI8Ft-moHFv8";
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let SUPABASE_ANON_KEY = "******";
+let sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+(function ensureAnonKeyAvailable(){
+  try{ const stored = sessionStorage.getItem('SUPABASE_ANON_KEY'); if(stored && SUPABASE_ANON_KEY==='******'){ SUPABASE_ANON_KEY=stored; sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);} }catch(e){}
+  if(SUPABASE_ANON_KEY==='******'){
+    const banner=document.createElement('div'); banner.style='position:fixed;right:12px;bottom:12px;z-index:9999;background:#111;color:#fff;padding:12px;border-radius:8px;font-family:monospace;font-size:13px;box-shadow:0 6px 18px rgba(0,0,0,.4)';
+    banner.innerHTML='(Supabase anon key required)';
+    document.body.appendChild(banner);
+  }
+})();
 
 let items = [];
 let pending = [];
