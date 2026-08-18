@@ -10,6 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="phash.js"></script>
 <style>
   :root{
     --accent:#F97F29;
@@ -177,6 +178,42 @@
   }
   .suggest-more{ font-size:11px; color:var(--text-muted); padding:10px 18px; text-align:center; }
 
+  .scan-row{ margin-top:12px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  #scanBtn{
+    display:inline-flex; align-items:center; gap:8px; font-family:var(--font-body);
+    font-size:12.5px; font-weight:600; color:var(--text-muted);
+    background:var(--surface); border:1px solid var(--border); cursor:pointer;
+    padding:10px 16px; border-radius:var(--radius-pill); box-shadow:var(--shadow);
+    transition:color .15s ease, border-color .15s ease;
+  }
+  #scanBtn:hover{ color:var(--accent); border-color:var(--accent); }
+  #scanBtn:disabled{ opacity:.6; cursor:default; }
+  #scanStatus{ font-size:12px; color:var(--text-muted); }
+
+  .scan-results{ display:flex; flex-direction:column; gap:10px; margin-top:14px; }
+  .scan-card{
+    display:flex; gap:14px; align-items:center; background:var(--surface);
+    border:1px solid var(--border); border-radius:var(--radius-md); padding:12px 16px;
+    box-shadow:var(--shadow); cursor:pointer; text-align:left;
+  }
+  .scan-card:hover{ border-color:var(--accent); }
+  .scan-thumb{
+    flex:none; width:56px; height:56px; border-radius:var(--radius-sm); object-fit:cover;
+    background:var(--surface-2);
+  }
+  .scan-card-body{ flex:1; min-width:0; }
+  .scan-card-sku{ font-family:var(--font-mono); font-size:12px; font-weight:600; color:var(--text); }
+  .scan-card-desc{
+    font-size:12.5px; color:var(--text-muted); margin-top:2px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .scan-card-conf{
+    flex:none; font-family:var(--font-mono); font-size:11px; font-weight:700;
+    padding:5px 10px; border-radius:var(--radius-pill); white-space:nowrap;
+  }
+  .scan-card-conf.is-close{ background:color-mix(in srgb, var(--accent) 16%, transparent); color:var(--accent); }
+  .scan-card-conf.is-far{ background:var(--surface-2); color:var(--text-muted); }
+
   .result{
     margin-top:24px; background:var(--surface); border:1px solid var(--border);
     border-radius:var(--radius-lg); box-shadow:var(--shadow);
@@ -318,6 +355,17 @@
       <input id="searchInput" type="text" placeholder="Enter SKU — e.g. ES2405" autocomplete="off" spellcheck="false">
       <div class="count" id="itemCount"></div>
     </div>
+
+    <div class="scan-row">
+      <input id="scanFile" type="file" accept="image/*" capture="environment" hidden>
+      <button id="scanBtn" type="button">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M20 8V6a2 2 0 0 0-2-2h-2M4 16v2a2 2 0 0 0 2 2h2M20 16v2a2 2 0 0 1-2 2h-2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="12" r="3.4" stroke="currentColor" stroke-width="1.8"/></svg>
+        Scan a photo
+      </button>
+      <span id="scanStatus"></span>
+    </div>
+    <div id="scanResults" class="scan-results"></div>
+
     <div class="suggest-list" id="suggestList"></div>
   </div>
 
@@ -361,11 +409,15 @@ async function loadAll(){
   const loadingNote = document.getElementById('loadingNote');
   try{
     let [{ data: itemRows, error: itemErr }, { data: rateRow, error: rateErr }] = await Promise.all([
-      sb.from('items').select('sku, description, usd, image_path, image_updated_at'),
+      sb.from('items').select('sku, description, usd, image_path, image_updated_at, image_phash'),
       sb.from('settings').select('value').eq('key', 'usd_inr_rate').maybeSingle()
     ]);
-    // Photos are optional. If the image migration hasn't run, fall back to the
-    // text columns rather than failing the customer-facing search outright.
+    // Photos/hashes are optional. If a migration hasn't run yet, fall back to
+    // progressively fewer columns rather than failing the customer-facing
+    // search outright.
+    if(itemErr && /image_phash/.test(itemErr.message || '')){
+      ({ data: itemRows, error: itemErr } = await sb.from('items').select('sku, description, usd, image_path, image_updated_at'));
+    }
     if(itemErr && /image_path|image_updated_at/.test(itemErr.message || '')){
       ({ data: itemRows, error: itemErr } = await sb.from('items').select('sku, description, usd'));
     }
@@ -527,6 +579,83 @@ document.addEventListener('click', (e)=>{
   if(wrap && !wrap.contains(e.target)) hideSuggestions();
 });
 
+// ===== Scan a photo — client-side perceptual hash =====
+// Hashes are computed once, in admin.html, at the moment a product photo is
+// uploaded, and stored on the row (image_phash). This page only ever reads
+// them — no separate script, no separate deploy step, no file to keep in
+// sync. A photo taken today is scannable the moment it's uploaded.
+const PHASH_MATCH_MAX = 5;    // how many candidates to show
+const PHASH_CLOSE_DIST = 12;  // out of 63 bits — see phash.js for the reasoning
+
+function hydrateScanResults(){
+  const btn = document.getElementById('scanBtn');
+  if(!btn) return; // phash.js failed to load — button stays inert rather than broken
+  btn.addEventListener('click', () => document.getElementById('scanFile').click());
+  document.getElementById('scanFile').addEventListener('change', onScanFileChosen);
+}
+
+async function onScanFileChosen(e){
+  const file = e.target.files && e.target.files[0];
+  const status = document.getElementById('scanStatus');
+  const results = document.getElementById('scanResults');
+  results.innerHTML = '';
+  if(!file){ status.textContent = ''; return; }
+
+  const hashed = items.filter(it => it.image_phash);
+  if(!hashed.length){
+    status.textContent = 'No product photos have been scanned into the catalogue yet.';
+    e.target.value = '';
+    return;
+  }
+
+  status.textContent = 'Reading photo…';
+  let hash;
+  try{
+    const img = await window.PHash.fileToImage(file);
+    hash = window.PHash.compute(img);
+  }catch(err){
+    status.textContent = "Couldn't read that image — try a different photo.";
+    e.target.value = '';
+    return;
+  }
+
+  const ranked = hashed
+    .map(it => ({ item: it, dist: window.PHash.hammingDistance(hash, it.image_phash) }))
+    .sort((a, b) => a.dist - b.dist)
+    .slice(0, PHASH_MATCH_MAX);
+
+  status.textContent = ranked[0] && ranked[0].dist <= PHASH_CLOSE_DIST
+    ? 'Closest matches — tap one to see its price'
+    : 'Nothing looked close. Closest guesses below, or search by SKU instead.';
+
+  results.innerHTML = ranked.map(({ item, dist }) => {
+    const close = dist <= PHASH_CLOSE_DIST;
+    return `<button type="button" class="scan-card" data-sku="${item.sku}">` +
+      (item.image_path
+        ? `<img class="scan-thumb" src="${imageUrl(item)}" alt="" loading="lazy">`
+        : `<span class="scan-thumb"></span>`) +
+      `<span class="scan-card-body">` +
+        `<span class="scan-card-sku">${item.sku}</span>` +
+        `<span class="scan-card-desc">${item.description}</span>` +
+      `</span>` +
+      `<span class="scan-card-conf ${close ? 'is-close' : 'is-far'}">${close ? 'Close match' : 'Unlikely'}</span>` +
+    `</button>`;
+  }).join('');
+
+  e.target.value = '';
+}
+
+document.getElementById('scanResults').addEventListener('click', (e) => {
+  const card = e.target.closest('.scan-card');
+  if(!card) return;
+  document.getElementById('searchInput').value = card.getAttribute('data-sku');
+  performSearch(card.getAttribute('data-sku'));
+  document.getElementById('scanResults').innerHTML = '';
+  document.getElementById('scanStatus').textContent = '';
+  document.getElementById('resultCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+hydrateScanResults();
 loadAll();
 </script>
 </body>

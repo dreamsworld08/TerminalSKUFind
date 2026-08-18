@@ -10,6 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="phash.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5/papaparse.min.js"></script>
 <style>
   :root{
@@ -848,6 +849,19 @@
           <div class="img-cover-lbl" id="imgCoverLbl">Loading…</div>
         </div>
       </div>
+      <div class="card" style="margin-top:14px;">
+        <div class="img-cover">
+          <div class="img-cover-num tabular" id="hashCoverNum">—</div>
+          <div class="img-cover-bar"><div class="img-cover-fill" id="hashCoverFill"></div></div>
+          <div class="img-cover-lbl" id="hashCoverLbl">Loading…</div>
+        </div>
+        <div class="note" style="margin-top:10px;">Every new photo is fingerprinted automatically when it's uploaded — this
+          only matters for photos that were uploaded before "Scan a photo" existed on the public page.</div>
+        <div style="margin-top:12px;">
+          <button class="primary" id="backfillHashBtn">Fingerprint existing photos</button>
+          <span class="status" id="backfillHashStatus"></span>
+        </div>
+      </div>
     </section>
 
     <section>
@@ -1403,8 +1417,10 @@ async function loadAll(){
 }
 
 const ITEM_COLS_BASE = 'id, sku, description, usd, length_mm, width_mm, height_mm, diameter_mm, dimension_sets, dimension_parse_status, dimension_raw, material, color, texture, material_review_status';
-const ITEM_COLS_IMAGES = ITEM_COLS_BASE + ', image_path, image_updated_at';
+const ITEM_COLS_IMAGES = ITEM_COLS_BASE + ', image_path, image_updated_at, image_phash';
+const ITEM_COLS_IMAGES_NO_PHASH = ITEM_COLS_BASE + ', image_path, image_updated_at';
 let imagesReady = true;
+let phashReady = true;
 
 // The catalogue is small and changes rarely, so keep the last copy locally and
 // paint from it immediately. The network fetch still runs and overwrites it -
@@ -1448,8 +1464,16 @@ function paintItems(){
 
 async function loadItems(){
   let { data, error } = await sb.from('items').select(ITEM_COLS_IMAGES).order('sku');
-  // If the image migration hasn't been run, fall back rather than taking the
-  // whole page down over two missing columns.
+  // Graceful degradation, most-featured query first: if image_phash doesn't
+  // exist yet, drop just that; if the photo columns don't exist either, drop
+  // those too. A migration nobody has run yet must never take the whole page
+  // down over two or three missing columns.
+  if(error && /image_phash/.test(error.message || '')){
+    phashReady = false;
+    ({ data, error } = await sb.from('items').select(ITEM_COLS_IMAGES_NO_PHASH).order('sku'));
+  } else if(!error){
+    phashReady = true;
+  }
   if(error && /image_path|image_updated_at/.test(error.message || '')){
     imagesReady = false;
     ({ data } = await sb.from('items').select(ITEM_COLS_BASE).order('sku'));
@@ -2141,8 +2165,21 @@ function downscale(file){
   });
 }
 
+// The perceptual hash is computed from the original file, before downscaling
+// — pHash is deliberately tolerant of resizing and recompression, so this
+// doesn't need the downscaled copy specifically, just a decodable image.
+// window.PHash comes from phash.js; its absence must never block a photo
+// upload, so a hashing failure is swallowed rather than thrown.
+async function computePhashSafely(file){
+  if(!window.PHash) return null;
+  try{
+    const img = await window.PHash.fileToImage(file);
+    return window.PHash.compute(img);
+  }catch(e){ return null; }
+}
+
 async function uploadImageFor(item, file){
-  const blob = await downscale(file);
+  const [blob, phash] = await Promise.all([downscale(file), computePhashSafely(file)]);
   const path = 'items/' + item.id + '-' + Date.now() + '.jpg';
   const previous = item.image_path;
 
@@ -2150,9 +2187,15 @@ async function uploadImageFor(item, file){
     .upload(path, blob, { contentType: 'image/jpeg', upsert: true });
   if(upErr) throw new Error(upErr.message);
 
-  const { error: dbErr } = await sb.from('items')
-    .update({ image_path: path, image_updated_at: new Date().toISOString() })
-    .eq('id', item.id);
+  const patch = { image_path: path, image_updated_at: new Date().toISOString(), image_phash: phash };
+  let { error: dbErr } = await sb.from('items').update(patch).eq('id', item.id);
+  if(dbErr && /image_phash/.test(dbErr.message || '')){
+    // migration_image_phash.sql hasn't been run yet — save the photo anyway,
+    // just without a hash. Scanning will pick this item up once it has one.
+    phashReady = false;
+    delete patch.image_phash;
+    ({ error: dbErr } = await sb.from('items').update(patch).eq('id', item.id));
+  }
   if(dbErr) throw new Error(dbErr.message);
 
   // Only bin the old file once the row points at the new one.
@@ -2165,7 +2208,7 @@ async function uploadImageFor(item, file){
 async function removeImageFor(item){
   const path = item.image_path;
   const { error } = await sb.from('items')
-    .update({ image_path: null, image_updated_at: null }).eq('id', item.id);
+    .update({ image_path: null, image_updated_at: null, image_phash: null }).eq('id', item.id);
   if(error) throw new Error(error.message);
   if(path) sb.storage.from(IMAGE_BUCKET).remove([path]).catch(()=>{});
 }
@@ -2185,6 +2228,20 @@ function renderImageCoverage(){
   }
   const dash = document.getElementById('dashImageCount');
   if(dash) dash.textContent = withImg + '/' + items.length;
+}
+
+function renderHashCoverage(){
+  const numEl = document.getElementById('hashCoverNum');
+  if(!numEl) return;
+  const withPhoto = items.filter(i => i.image_path);
+  const withHash = withPhoto.filter(i => i.image_phash).length;
+  const pct = withPhoto.length ? Math.round(withHash / withPhoto.length * 100) : 0;
+  numEl.textContent = withHash + ' / ' + withPhoto.length;
+  document.getElementById('hashCoverFill').style.width = pct + '%';
+  document.getElementById('hashCoverLbl').textContent = !withPhoto.length
+    ? 'No photos uploaded yet'
+    : pct + '% of photographed pieces are scannable' +
+      (withHash < withPhoto.length ? ' · ' + (withPhoto.length - withHash) + ' need fingerprinting' : ' · complete');
 }
 
 function siblingsOf(item){
@@ -2236,7 +2293,45 @@ function renderImageGrid(){
   }).join('');
 }
 
-function refreshImages(){ renderImageCoverage(); renderImageGrid(); }
+function refreshImages(){ renderImageCoverage(); renderHashCoverage(); renderImageGrid(); }
+
+// ----- backfill: fingerprint photos uploaded before this feature existed -----
+function urlToImage(url){
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous'; // needed to read pixels back off a cross-origin Supabase URL
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('image failed to load'));
+    img.src = url;
+  });
+}
+
+document.getElementById('backfillHashBtn').addEventListener('click', async () => {
+  const statusEl = document.getElementById('backfillHashStatus');
+  const btn = document.getElementById('backfillHashBtn');
+  if(!window.PHash){ statusEl.textContent = 'phash.js did not load — check your connection and reload.'; return; }
+
+  const todo = items.filter(i => i.image_path && !i.image_phash);
+  if(!todo.length){ statusEl.textContent = 'Every photographed piece already has a fingerprint.'; return; }
+
+  btn.disabled = true;
+  let ok = 0, fail = 0;
+  for(let i = 0; i < todo.length; i++){
+    const item = todo[i];
+    statusEl.textContent = 'Fingerprinting ' + (i + 1) + ' of ' + todo.length + '…';
+    try{
+      const img = await urlToImage(imageUrl(item));
+      const hash = window.PHash.compute(img);
+      const { error } = await sb.from('items').update({ image_phash: hash }).eq('id', item.id);
+      if(error) throw new Error(error.message);
+      item.image_phash = hash; // keep the in-memory copy in sync without a full reload
+      ok++;
+    }catch(e){ fail++; }
+    renderHashCoverage();
+  }
+  statusEl.textContent = 'Done. ' + ok + ' fingerprinted' + (fail ? ', ' + fail + ' failed (often a CORS-blocked image host — safe to retry)' : '') + '.';
+  btn.disabled = false;
+});
 
 document.querySelectorAll('[data-imgfilter]').forEach(btn => {
   btn.addEventListener('click', ()=>{
