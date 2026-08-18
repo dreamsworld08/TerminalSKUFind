@@ -60,6 +60,25 @@ The full migration (additive, nullable columns only) is in `migration_furniture_
 - **Top products**: the most-searched SKUs resolved back to catalog items, with product name, SKU and INR price.
 - **Local weather**: current temperature and conditions for wherever the admin is. Location comes from the browser's geolocation prompt, falling back to IP lookup, then to Dhaka. This is the only part of the app that calls third-party services — `open-meteo.com` (weather, no API key), `ipwho.is` (IP location) and `bigdatacloud.net` (reverse geocoding). All are called from the browser; if any is blocked the card degrades to "Weather unavailable" and nothing else is affected.
 
+## Scan a photo (optional)
+
+The public page can identify a product from a photo instead of a SKU. It's
+perceptual-hash matching (`phash.js`, shared by both pages), not a vision
+model — a photo maps to a 63-bit fingerprint such that visually similar
+photos land close together, even after resizing or recompression.
+
+There's no separate pipeline to keep in sync: `admin.html` computes the
+fingerprint automatically the moment a photo is uploaded, using the same
+`uploadImageFor()` that saves the file, and stores it in `items.image_phash`.
+A photo taken today is scannable within seconds, with no script to run and
+no file to redeploy.
+
+Setup: run `migration_image_phash.sql` once (adds one nullable column).
+Existing photos uploaded before this feature existed won't have a
+fingerprint yet — **Admin → Product photos → "Fingerprint existing
+photos"** backfills them by re-fetching each one and hashing it, same as a
+fresh upload would have.
+
 ## AI suggestions (optional)
 
 The Furniture Finder can hand its shortlist to a language model, which proposes a

@@ -10,6 +10,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="phash.js"></script>
 <style>
   :root{
     --accent:#F97F29;
@@ -177,6 +178,42 @@
   }
   .suggest-more{ font-size:11px; color:var(--text-muted); padding:10px 18px; text-align:center; }
 
+  .scan-row{ margin-top:12px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  #scanBtn{
+    display:inline-flex; align-items:center; gap:8px; font-family:var(--font-body);
+    font-size:12.5px; font-weight:600; color:var(--text-muted);
+    background:var(--surface); border:1px solid var(--border); cursor:pointer;
+    padding:10px 16px; border-radius:var(--radius-pill); box-shadow:var(--shadow);
+    transition:color .15s ease, border-color .15s ease;
+  }
+  #scanBtn:hover{ color:var(--accent); border-color:var(--accent); }
+  #scanBtn:disabled{ opacity:.6; cursor:default; }
+  #scanStatus{ font-size:12px; color:var(--text-muted); }
+
+  .scan-results{ display:flex; flex-direction:column; gap:10px; margin-top:14px; }
+  .scan-card{
+    display:flex; gap:14px; align-items:center; background:var(--surface);
+    border:1px solid var(--border); border-radius:var(--radius-md); padding:12px 16px;
+    box-shadow:var(--shadow); cursor:pointer; text-align:left;
+  }
+  .scan-card:hover{ border-color:var(--accent); }
+  .scan-thumb{
+    flex:none; width:56px; height:56px; border-radius:var(--radius-sm); object-fit:cover;
+    background:var(--surface-2);
+  }
+  .scan-card-body{ flex:1; min-width:0; }
+  .scan-card-sku{ font-family:var(--font-mono); font-size:12px; font-weight:600; color:var(--text); }
+  .scan-card-desc{
+    font-size:12.5px; color:var(--text-muted); margin-top:2px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
+  .scan-card-conf{
+    flex:none; font-family:var(--font-mono); font-size:11px; font-weight:700;
+    padding:5px 10px; border-radius:var(--radius-pill); white-space:nowrap;
+  }
+  .scan-card-conf.is-close{ background:color-mix(in srgb, var(--accent) 16%, transparent); color:var(--accent); }
+  .scan-card-conf.is-far{ background:var(--surface-2); color:var(--text-muted); }
+
   .result{
     margin-top:24px; background:var(--surface); border:1px solid var(--border);
     border-radius:var(--radius-lg); box-shadow:var(--shadow);
@@ -319,11 +356,15 @@
       <div class="count" id="itemCount"></div>
     </div>
 
-    <div class="scan-row" style="margin-top:8px; display:flex; gap:8px; align-items:center;">
-      <input id="scanFile" type="file" accept="image/*" capture="environment" style="display:none">
-      <button id="scanBtn" class="btn" style="padding:8px 12px; font-family: 'IBM Plex Mono', monospace;">Scan Image</button>
-      <span id="scanStatus" style="font-family:'IBM Plex Mono', monospace; color:var(--ink-soft); font-size:13px;"></span>
+    <div class="scan-row">
+      <input id="scanFile" type="file" accept="image/*" capture="environment" hidden>
+      <button id="scanBtn" type="button">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 8V6a2 2 0 0 1 2-2h2M20 8V6a2 2 0 0 0-2-2h-2M4 16v2a2 2 0 0 0 2 2h2M20 16v2a2 2 0 0 1-2 2h-2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="12" cy="12" r="3.4" stroke="currentColor" stroke-width="1.8"/></svg>
+        Scan a photo
+      </button>
+      <span id="scanStatus"></span>
     </div>
+    <div id="scanResults" class="scan-results"></div>
 
     <div class="suggest-list" id="suggestList"></div>
   </div>
@@ -368,11 +409,15 @@ async function loadAll(){
   const loadingNote = document.getElementById('loadingNote');
   try{
     let [{ data: itemRows, error: itemErr }, { data: rateRow, error: rateErr }] = await Promise.all([
-      sb.from('items').select('sku, description, usd, image_path, image_updated_at'),
+      sb.from('items').select('sku, description, usd, image_path, image_updated_at, image_phash'),
       sb.from('settings').select('value').eq('key', 'usd_inr_rate').maybeSingle()
     ]);
-    // Photos are optional. If the image migration hasn't run, fall back to the
-    // text columns rather than failing the customer-facing search outright.
+    // Photos/hashes are optional. If a migration hasn't run yet, fall back to
+    // progressively fewer columns rather than failing the customer-facing
+    // search outright.
+    if(itemErr && /image_phash/.test(itemErr.message || '')){
+      ({ data: itemRows, error: itemErr } = await sb.from('items').select('sku, description, usd, image_path, image_updated_at'));
+    }
     if(itemErr && /image_path|image_updated_at/.test(itemErr.message || '')){
       ({ data: itemRows, error: itemErr } = await sb.from('items').select('sku, description, usd'));
     }
@@ -534,116 +579,83 @@ document.addEventListener('click', (e)=>{
   if(wrap && !wrap.contains(e.target)) hideSuggestions();
 });
 
-// ===== Image scan (client-side pHash) =====
-let imageHashes = []; // [{sku, hash}]
-async function loadImageHashes(){
-  try{
-    const r = await fetch('/docs/image_hashes.json', {cache: 'no-cache'});
-    if(!r.ok) return;
-    const j = await r.json();
-    if(Array.isArray(j)) imageHashes = j;
-  }catch(e){ console.warn('No image_hashes.json available', e); }
+// ===== Scan a photo — client-side perceptual hash =====
+// Hashes are computed once, in admin.html, at the moment a product photo is
+// uploaded, and stored on the row (image_phash). This page only ever reads
+// them — no separate script, no separate deploy step, no file to keep in
+// sync. A photo taken today is scannable the moment it's uploaded.
+const PHASH_MATCH_MAX = 5;    // how many candidates to show
+const PHASH_CLOSE_DIST = 12;  // out of 63 bits — see phash.js for the reasoning
+
+function hydrateScanResults(){
+  const btn = document.getElementById('scanBtn');
+  if(!btn) return; // phash.js failed to load — button stays inert rather than broken
+  btn.addEventListener('click', () => document.getElementById('scanFile').click());
+  document.getElementById('scanFile').addEventListener('change', onScanFileChosen);
 }
 
-function hammingDistance(a,b){
-  if(!a || !b) return Infinity;
-  let i=0, cnt=0; const n = Math.min(a.length,b.length);
-  for(i=0;i<n;i++) if(a[i] !== b[i]) cnt++;
-  cnt += Math.abs(a.length - b.length);
-  return cnt;
-}
-
-async function fileToImage(file){
-  return new Promise((resolve, reject)=>{
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = ()=>{ URL.revokeObjectURL(url); resolve(img); };
-    img.onerror = (e)=>{ URL.revokeObjectURL(url); reject(e); };
-    img.src = url;
-  });
-}
-
-function computePHashFromImage(img){
-  // Resize -> grayscale -> 2D DCT -> top-left 8x8 -> binary hash (skip DC)
-  const N = 32; const M = 8;
-  const c = document.createElement('canvas'); c.width = N; c.height = N;
-  const ctx = c.getContext('2d');
-  ctx.drawImage(img, 0, 0, N, N);
-  const d = ctx.getImageData(0,0,N,N).data;
-  const vals = new Float64Array(N*N);
-  for(let y=0;y<N;y++){
-    for(let x=0;x<N;x++){
-      const i = (y*N + x)*4;
-      const r = d[i], g = d[i+1], b = d[i+2];
-      vals[y*N + x] = 0.299*r + 0.587*g + 0.114*b;
-    }
-  }
-  // naive DCT-II 2D
-  const PI = Math.PI;
-  function dct2(vals){
-    const out = new Float64Array(N*N);
-    for(let u=0;u<N;u++){
-      for(let v=0;v<N;v++){
-        let sum = 0;
-        for(let x=0;x<N;x++){
-          for(let y=0;y<N;y++){
-            sum += vals[y*N + x] * Math.cos(((2*x+1)*u*PI)/(2*N)) * Math.cos(((2*y+1)*v*PI)/(2*N));
-          }
-        }
-        const cu = u===0 ? 1/Math.sqrt(2) : 1;
-        const cv = v===0 ? 1/Math.sqrt(2) : 1;
-        out[u*N + v] = (2 / N) * cu * cv * sum;
-      }
-    }
-    return out;
-  }
-  const dct = dct2(vals);
-  const block = [];
-  for(let u=0;u<M;u++) for(let v=0;v<M;v++) block.push(dct[u*N + v]);
-  const ac = block.slice(1); // drop DC
-  const sorted = ac.slice().sort((a,b)=>a-b);
-  const median = sorted[Math.floor(sorted.length/2)];
-  const bits = ac.map(v => v > median ? '1' : '0').join('');
-  return bits; // 63-bit string
-}
-
-async function matchImageFile(file){
-  try{
-    const img = await fileToImage(file);
-    const ph = computePHashFromImage(img);
-    // compare
-    let best = {sku:null, dist:Infinity};
-    for(const it of imageHashes){
-      const d = hammingDistance(ph, it.hash);
-      if(d < best.dist){ best = {sku: it.sku, dist: d}; }
-    }
-    return {hash:ph, best};
-  }catch(e){ return null; }
-}
-
-// Wire UI
-document.getElementById('scanBtn').addEventListener('click', ()=> document.getElementById('scanFile').click());
-document.getElementById('scanFile').addEventListener('change', async (e)=>{
-  const f = e.target.files && e.target.files[0];
+async function onScanFileChosen(e){
+  const file = e.target.files && e.target.files[0];
   const status = document.getElementById('scanStatus');
-  if(!f){ status.textContent = '' ; return; }
-  status.textContent = 'Computing image fingerprint…';
-  const res = await matchImageFile(f);
-  if(!res){ status.textContent = 'Could not read image.'; return; }
-  const { best } = res;
-  if(!imageHashes.length){ status.textContent = 'No image hashes available — upload docs/image_hashes.json to enable scanning.'; return; }
-  // threshold: allow up to 12 differences for 63-bit hash
-  if(best && best.dist <= 12){
-    status.textContent = `Match: ${best.sku} (distance ${best.dist})`;
-    document.getElementById('searchInput').value = best.sku;
-    performSearch(best.sku);
-  }else{
-    status.textContent = 'No confident match found — try a clearer photo or use manual search.';
+  const results = document.getElementById('scanResults');
+  results.innerHTML = '';
+  if(!file){ status.textContent = ''; return; }
+
+  const hashed = items.filter(it => it.image_phash);
+  if(!hashed.length){
+    status.textContent = 'No product photos have been scanned into the catalogue yet.';
+    e.target.value = '';
+    return;
   }
+
+  status.textContent = 'Reading photo…';
+  let hash;
+  try{
+    const img = await window.PHash.fileToImage(file);
+    hash = window.PHash.compute(img);
+  }catch(err){
+    status.textContent = "Couldn't read that image — try a different photo.";
+    e.target.value = '';
+    return;
+  }
+
+  const ranked = hashed
+    .map(it => ({ item: it, dist: window.PHash.hammingDistance(hash, it.image_phash) }))
+    .sort((a, b) => a.dist - b.dist)
+    .slice(0, PHASH_MATCH_MAX);
+
+  status.textContent = ranked[0] && ranked[0].dist <= PHASH_CLOSE_DIST
+    ? 'Closest matches — tap one to see its price'
+    : 'Nothing looked close. Closest guesses below, or search by SKU instead.';
+
+  results.innerHTML = ranked.map(({ item, dist }) => {
+    const close = dist <= PHASH_CLOSE_DIST;
+    return `<button type="button" class="scan-card" data-sku="${item.sku}">` +
+      (item.image_path
+        ? `<img class="scan-thumb" src="${imageUrl(item)}" alt="" loading="lazy">`
+        : `<span class="scan-thumb"></span>`) +
+      `<span class="scan-card-body">` +
+        `<span class="scan-card-sku">${item.sku}</span>` +
+        `<span class="scan-card-desc">${item.description}</span>` +
+      `</span>` +
+      `<span class="scan-card-conf ${close ? 'is-close' : 'is-far'}">${close ? 'Close match' : 'Unlikely'}</span>` +
+    `</button>`;
+  }).join('');
+
+  e.target.value = '';
+}
+
+document.getElementById('scanResults').addEventListener('click', (e) => {
+  const card = e.target.closest('.scan-card');
+  if(!card) return;
+  document.getElementById('searchInput').value = card.getAttribute('data-sku');
+  performSearch(card.getAttribute('data-sku'));
+  document.getElementById('scanResults').innerHTML = '';
+  document.getElementById('scanStatus').textContent = '';
+  document.getElementById('resultCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
 });
 
-// load stored hashes then catalog
-await loadImageHashes();
+hydrateScanResults();
 loadAll();
 </script>
 </body>
