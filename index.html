@@ -233,6 +233,13 @@
       <input id="searchInput" type="text" placeholder="Enter SKU — e.g. ES2405" autocomplete="off" spellcheck="false">
       <div class="count" id="itemCount"></div>
     </div>
+
+    <div class="scan-row" style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+      <input id="scanFile" type="file" accept="image/*" capture="environment" style="display:none">
+      <button id="scanBtn" class="btn" style="padding:8px 12px; font-family: 'IBM Plex Mono', monospace;">Scan Image</button>
+      <span id="scanStatus" style="font-family:'IBM Plex Mono', monospace; color:var(--ink-soft); font-size:13px;"></span>
+    </div>
+
     <div class="suggest-list" id="suggestList"></div>
   </div>
 
@@ -420,6 +427,116 @@ document.addEventListener('click', (e)=>{
   if(wrap && !wrap.contains(e.target)) hideSuggestions();
 });
 
+// ===== Image scan (client-side pHash) =====
+let imageHashes = []; // [{sku, hash}]
+async function loadImageHashes(){
+  try{
+    const r = await fetch('/docs/image_hashes.json', {cache: 'no-cache'});
+    if(!r.ok) return;
+    const j = await r.json();
+    if(Array.isArray(j)) imageHashes = j;
+  }catch(e){ console.warn('No image_hashes.json available', e); }
+}
+
+function hammingDistance(a,b){
+  if(!a || !b) return Infinity;
+  let i=0, cnt=0; const n = Math.min(a.length,b.length);
+  for(i=0;i<n;i++) if(a[i] !== b[i]) cnt++;
+  cnt += Math.abs(a.length - b.length);
+  return cnt;
+}
+
+async function fileToImage(file){
+  return new Promise((resolve, reject)=>{
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = ()=>{ URL.revokeObjectURL(url); resolve(img); };
+    img.onerror = (e)=>{ URL.revokeObjectURL(url); reject(e); };
+    img.src = url;
+  });
+}
+
+function computePHashFromImage(img){
+  // Resize -> grayscale -> 2D DCT -> top-left 8x8 -> binary hash (skip DC)
+  const N = 32; const M = 8;
+  const c = document.createElement('canvas'); c.width = N; c.height = N;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(img, 0, 0, N, N);
+  const d = ctx.getImageData(0,0,N,N).data;
+  const vals = new Float64Array(N*N);
+  for(let y=0;y<N;y++){
+    for(let x=0;x<N;x++){
+      const i = (y*N + x)*4;
+      const r = d[i], g = d[i+1], b = d[i+2];
+      vals[y*N + x] = 0.299*r + 0.587*g + 0.114*b;
+    }
+  }
+  // naive DCT-II 2D
+  const PI = Math.PI;
+  function dct2(vals){
+    const out = new Float64Array(N*N);
+    for(let u=0;u<N;u++){
+      for(let v=0;v<N;v++){
+        let sum = 0;
+        for(let x=0;x<N;x++){
+          for(let y=0;y<N;y++){
+            sum += vals[y*N + x] * Math.cos(((2*x+1)*u*PI)/(2*N)) * Math.cos(((2*y+1)*v*PI)/(2*N));
+          }
+        }
+        const cu = u===0 ? 1/Math.sqrt(2) : 1;
+        const cv = v===0 ? 1/Math.sqrt(2) : 1;
+        out[u*N + v] = (2 / N) * cu * cv * sum;
+      }
+    }
+    return out;
+  }
+  const dct = dct2(vals);
+  const block = [];
+  for(let u=0;u<M;u++) for(let v=0;v<M;v++) block.push(dct[u*N + v]);
+  const ac = block.slice(1); // drop DC
+  const sorted = ac.slice().sort((a,b)=>a-b);
+  const median = sorted[Math.floor(sorted.length/2)];
+  const bits = ac.map(v => v > median ? '1' : '0').join('');
+  return bits; // 63-bit string
+}
+
+async function matchImageFile(file){
+  try{
+    const img = await fileToImage(file);
+    const ph = computePHashFromImage(img);
+    // compare
+    let best = {sku:null, dist:Infinity};
+    for(const it of imageHashes){
+      const d = hammingDistance(ph, it.hash);
+      if(d < best.dist){ best = {sku: it.sku, dist: d}; }
+    }
+    return {hash:ph, best};
+  }catch(e){ return null; }
+}
+
+// Wire UI
+document.getElementById('scanBtn').addEventListener('click', ()=> document.getElementById('scanFile').click());
+document.getElementById('scanFile').addEventListener('change', async (e)=>{
+  const f = e.target.files && e.target.files[0];
+  const status = document.getElementById('scanStatus');
+  if(!f){ status.textContent = '' ; return; }
+  status.textContent = 'Computing image fingerprint…';
+  const res = await matchImageFile(f);
+  if(!res){ status.textContent = 'Could not read image.'; return; }
+  const { best } = res;
+  if(!imageHashes.length){ status.textContent = 'No image hashes available — upload docs/image_hashes.json to enable scanning.'; return; }
+  // threshold: allow up to 12 differences for 63-bit hash
+  if(best && best.dist <= 12){
+    status.textContent = `Match: ${best.sku} (distance ${best.dist})`;
+    document.getElementById('searchInput').value = best.sku;
+    performSearch(best.sku);
+  }else{
+    status.textContent = 'No confident match found — try a clearer photo or use manual search.';
+  }
+});
+
+// load stored hashes then catalog
+await loadImageHashes();
 loadAll();
 </script>
 </body>
