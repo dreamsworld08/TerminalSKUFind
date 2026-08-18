@@ -2315,21 +2315,41 @@ document.getElementById('backfillHashBtn').addEventListener('click', async () =>
   if(!todo.length){ statusEl.textContent = 'Every photographed piece already has a fingerprint.'; return; }
 
   btn.disabled = true;
-  let ok = 0, fail = 0;
+  let ok = 0, loadFail = 0, dbFail = 0;
   for(let i = 0; i < todo.length; i++){
     const item = todo[i];
     statusEl.textContent = 'Fingerprinting ' + (i + 1) + ' of ' + todo.length + '…';
+    let hash;
     try{
       const img = await urlToImage(imageUrl(item));
-      const hash = window.PHash.compute(img);
-      const { error } = await sb.from('items').update({ image_phash: hash }).eq('id', item.id);
-      if(error) throw new Error(error.message);
-      item.image_phash = hash; // keep the in-memory copy in sync without a full reload
-      ok++;
-    }catch(e){ fail++; }
+      hash = window.PHash.compute(img);
+    }catch(e){ loadFail++; continue; }
+
+    const { error } = await sb.from('items').update({ image_phash: hash }).eq('id', item.id);
+    if(error){
+      // The column not existing fails every remaining attempt identically -
+      // running 77 more doomed requests just to say so 77 more times helps
+      // no one, and the earlier generic "failed" message actively pointed at
+      // the wrong cause (CORS) when this is what actually happened once.
+      if(/image_phash/.test(error.message || '')){
+        statusEl.textContent = 'The image_phash column doesn\'t exist on your database yet. ' +
+          'Run migration_image_phash.sql once in the Supabase SQL Editor, then try this again.';
+        btn.disabled = false;
+        return;
+      }
+      dbFail++;
+      continue;
+    }
+    item.image_phash = hash; // keep the in-memory copy in sync without a full reload
+    ok++;
     renderHashCoverage();
   }
-  statusEl.textContent = 'Done. ' + ok + ' fingerprinted' + (fail ? ', ' + fail + ' failed (often a CORS-blocked image host — safe to retry)' : '') + '.';
+  const fail = loadFail + dbFail;
+  statusEl.textContent = 'Done. ' + ok + ' fingerprinted' +
+    (fail ? ', ' + fail + ' failed (' +
+      [loadFail && (loadFail + ' image' + (loadFail===1?'':'s') + ' wouldn\'t load'),
+       dbFail && (dbFail + ' database write' + (dbFail===1?'':'s') + ' failed')]
+        .filter(Boolean).join(', ') + ' — safe to retry)' : '') + '.';
   btn.disabled = false;
 });
 
