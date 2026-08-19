@@ -56,7 +56,70 @@ The full migration (additive, nullable columns only) is in `migration_furniture_
   - *Export material/color/texture review CSV*: downloads a CSV with best-guess material/color/texture per item (parsed from `description`), flagging low-confidence rows as `REVIEW`. Nothing is written to the database at this step.
   - *Import corrected CSV*: re-upload the reviewed CSV to write `material`/`color`/`texture` back to the DB, matched by row `id` (never by `sku`, since SKU isn't unique).
 - **Furniture Finder**: given a client's room size or a target furniture size — entered in mm, inches, or feet (including `8'6"` notation) — lists catalog items that fit, with material/texture filters (e.g. exclude leather). Room mode checks footprint against (room size − a configurable clearance margin); furniture mode matches within a configurable tolerance %. Both allow the piece to be rotated 90°. Multi-part/combo items are always shown with a "verify manually" flag rather than silently included or excluded.
-- **Analytics**: total searches, distinct SKUs searched, ranked bar list of most-searched SKUs (from `search_counts`).
+- **Analytics**: total searches and distinct SKUs searched, plus a bar chart of the most-searched SKUs (from `search_counts`), shown directly on the dashboard.
+- **Top products**: the most-searched SKUs resolved back to catalog items, with product name, SKU and INR price.
+- **Local weather**: current temperature and conditions for wherever the admin is. Location comes from the browser's geolocation prompt, falling back to IP lookup, then to Dhaka. This is the only part of the app that calls third-party services — `open-meteo.com` (weather, no API key), `ipwho.is` (IP location) and `bigdatacloud.net` (reverse geocoding). All are called from the browser; if any is blocked the card degrades to "Weather unavailable" and nothing else is affected.
+
+## Scan a photo (optional)
+
+The public page can identify a product from a photo instead of a SKU, using
+two matchers together:
+
+- **Perceptual hash** (`phash.js`, `items.image_phash`) recognises a
+  re-photograph of the exact same catalogue image — a photo maps to a 63-bit
+  fingerprint such that visually similar photos land close together, even
+  after resizing or recompression. It's instant and needs no download, so it
+  runs first as a pre-check.
+- **Visual recognition** (`mobilenet-embed.js`, `items.image_embedding`)
+  covers the case pHash can't: the same product photographed from a
+  different angle, background, or lighting. It runs MobileNetV2, an
+  open-source vision model, entirely in the browser via TensorFlow.js
+  (fetched from a CDN, ~16MB, cached after first use) and compares photos by
+  the cosine similarity of their feature vectors rather than raw pixels.
+
+There's no separate pipeline to keep in sync: `admin.html` computes both the
+fingerprint and the embedding automatically the moment a photo is uploaded,
+using the same `uploadImageFor()` that saves the file. A photo taken today
+is scannable within seconds, with no script to run and no file to redeploy.
+
+Setup: run `migration_image_phash.sql` and `migration_image_embedding.sql`
+once each (each adds one nullable column). Existing photos uploaded before
+these features existed won't have a fingerprint or embedding yet — **Admin →
+Product photos → "Fingerprint existing photos"** and **"Compute visual
+recognition for existing photos"** backfill them by re-fetching each photo
+and processing it, same as a fresh upload would have. Either can be skipped;
+each degrades gracefully and the other keeps working.
+
+## AI suggestions (optional)
+
+The Furniture Finder can hand its shortlist to a language model, which proposes a
+coherent scheme and explains each choice. It is optional — the scoring engine works
+on its own, and the panel degrades to a setup hint if the function isn't deployed.
+
+**The OpenRouter key must never go in `admin.html`.** This repo and the GitHub Pages
+site are public, so a key in the page is a key anyone can read and spend. It lives in
+a Supabase Edge Function instead:
+
+1. Supabase dashboard → **Edge Functions** → **Deploy a new function**, name it
+   `ai-suggest`, and paste in `supabase/functions/ai-suggest/index.ts`.
+2. Supabase dashboard → **Project Settings → Edge Functions → Secrets** → add
+   `OPENROUTER_API_KEY` with your key. Optionally add `OPENROUTER_MODEL` to change
+   models.
+
+With the CLI instead: `supabase secrets set OPENROUTER_API_KEY=...` then
+`supabase functions deploy ai-suggest`.
+
+Notes:
+- Only the shortlist the local engine already ranked is sent (max 24 items), so the
+  model can only choose between pieces that physically fit, and cannot invent stock.
+- Each candidate carries a row `ref`, not just a SKU — one SKU covers several
+  variants (the same sofa in leather and in fabric), and they are not interchangeable.
+  Replies are resolved by `ref` so the card shows the exact variant chosen.
+- Default model is `google/gemini-3.5-flash-lite` (~₹0.12 a search). This account
+  restricts providers to nvidia/mistral/tencent/cloudflare/perplexity/google-ai-studio,
+  so Anthropic and OpenAI models return `404 no allowed providers`.
+- The function is callable by anyone holding the anon key (which is in the page).
+  Set a spend limit on the OpenRouter key to bound the worst case.
 
 ## Data history / key decisions
 
