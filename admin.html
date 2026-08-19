@@ -11,7 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="phash.js"></script>
-<script src="mobilenet-embed.js"></script>
+<script src="visual-embed.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5/papaparse.min.js"></script>
 <style>
   :root{
@@ -870,7 +870,7 @@
           <div class="img-cover-lbl" id="embedCoverLbl">Loading…</div>
         </div>
         <div class="note" style="margin-top:10px;">Fingerprinting above only catches a re-photograph of the exact same
-          image. This uses an open-source vision model (MobileNet) so "Scan a photo" also recognises a piece from a
+          image. This uses an open-source vision model (DINOv2) so "Scan a photo" also recognises a piece from a
           different angle, background, or lighting — computed automatically on every new upload.</div>
         <div style="margin-top:12px;">
           <button class="primary" id="backfillEmbedBtn">Compute visual recognition for existing photos</button>
@@ -1438,6 +1438,12 @@ const ITEM_COLS_IMAGES = ITEM_COLS_IMAGES_NO_EMBED + ', image_embedding';
 let imagesReady = true;
 let phashReady = true;
 let embeddingReady = true;
+
+// Must match visual-embed.js's DIM. Kept as a plain constant, rather than
+// read off window.VisualEmbed, so coverage counting still works even if
+// that script failed to load — a stored embedding of any other length is
+// stale (from a previous model) and needs recomputing.
+const EMBED_DIM = 384;
 
 // The catalogue is small and changes rarely, so keep the last copy locally and
 // paint from it immediately. The network fetch still runs and overwrites it -
@@ -2202,16 +2208,17 @@ async function computePhashSafely(file){
   }catch(e){ return null; }
 }
 
-// window.MobileEmbed comes from mobilenet-embed.js; its absence, or the
-// model failing to load (offline, blocked CDN), must never block a photo
-// upload — same policy as computePhashSafely.
+// window.VisualEmbed comes from visual-embed.js; its absence, or the model
+// failing to load (offline, blocked CDN), must never block a photo upload —
+// same policy as computePhashSafely.
 async function computeEmbeddingSafely(file){
-  if(!window.MobileEmbed) return null;
+  if(!window.VisualEmbed) return null;
+  const url = URL.createObjectURL(file);
   try{
-    const img = await window.MobileEmbed.fileToImage(file);
-    const vec = await window.MobileEmbed.compute(img);
-    return window.MobileEmbed.toArray(vec);
+    const vec = await window.VisualEmbed.compute(url);
+    return window.VisualEmbed.toArray(vec);
   }catch(e){ return null; }
+  finally{ URL.revokeObjectURL(url); }
 }
 
 async function uploadImageFor(item, file){
@@ -2296,7 +2303,9 @@ function renderEmbedCoverage(){
   const numEl = document.getElementById('embedCoverNum');
   if(!numEl) return;
   const withPhoto = items.filter(it => it.image_path);
-  const withEmbed = withPhoto.filter(it => it.image_embedding && it.image_embedding.length).length;
+  // Length must match EMBED_DIM: a shorter/longer stored vector is stale,
+  // left over from a previous embedding model, and needs recomputing.
+  const withEmbed = withPhoto.filter(it => it.image_embedding && it.image_embedding.length === EMBED_DIM).length;
   const pct = withPhoto.length ? Math.round(withEmbed / withPhoto.length * 100) : 0;
   numEl.textContent = withEmbed + ' / ' + withPhoto.length;
   document.getElementById('embedCoverFill').style.width = pct + '%';
@@ -2415,18 +2424,18 @@ document.getElementById('backfillHashBtn').addEventListener('click', async () =>
   btn.disabled = false;
 });
 
-// ----- backfill: compute visual embeddings for photos uploaded before this feature existed -----
+// ----- backfill: compute visual embeddings for photos uploaded before this feature existed (or under a previous model) -----
 document.getElementById('backfillEmbedBtn').addEventListener('click', async () => {
   const statusEl = document.getElementById('backfillEmbedStatus');
   const btn = document.getElementById('backfillEmbedBtn');
-  if(!window.MobileEmbed){ statusEl.textContent = 'mobilenet-embed.js did not load — check your connection and reload.'; return; }
+  if(!window.VisualEmbed){ statusEl.textContent = 'visual-embed.js did not load — check your connection and reload.'; return; }
 
-  const todo = items.filter(i => i.image_path && !(i.image_embedding && i.image_embedding.length));
+  const todo = items.filter(i => i.image_path && !(i.image_embedding && i.image_embedding.length === EMBED_DIM));
   if(!todo.length){ statusEl.textContent = 'Every photographed piece is already visually recognisable.'; return; }
 
   btn.disabled = true;
-  statusEl.textContent = 'Loading the visual recognition model (first run only, ~16MB)…';
-  try{ await window.MobileEmbed.load(); }
+  statusEl.textContent = 'Loading the visual recognition model (first run only, ~90MB)…';
+  try{ await window.VisualEmbed.load(); }
   catch(e){
     statusEl.textContent = "Couldn't load the visual recognition model — check your connection and try again.";
     btn.disabled = false;
@@ -2439,8 +2448,7 @@ document.getElementById('backfillEmbedBtn').addEventListener('click', async () =
     statusEl.textContent = 'Analysing ' + (i + 1) + ' of ' + todo.length + '…';
     let embedding;
     try{
-      const img = await urlToImage(imageUrl(item));
-      embedding = window.MobileEmbed.toArray(await window.MobileEmbed.compute(img));
+      embedding = window.VisualEmbed.toArray(await window.VisualEmbed.compute(imageUrl(item)));
     }catch(e){ loadFail++; continue; }
 
     const { error } = await sb.from('items').update({ image_embedding: embedding }).eq('id', item.id);

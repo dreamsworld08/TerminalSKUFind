@@ -11,7 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="phash.js"></script>
-<script src="mobilenet-embed.js"></script>
+<script src="visual-embed.js"></script>
 <style>
   :root{
     --accent:#F97F29;
@@ -410,20 +410,20 @@ async function loadAll(){
   const loadingNote = document.getElementById('loadingNote');
   try{
     let [{ data: itemRows, error: itemErr }, { data: rateRow, error: rateErr }] = await Promise.all([
-      sb.from('items').select('sku, description, usd, image_path, image_updated_at, image_phash, image_embedding'),
+      sb.from('items').select('id, sku, description, usd, image_path, image_updated_at, image_phash, image_embedding'),
       sb.from('settings').select('value').eq('key', 'usd_inr_rate').maybeSingle()
     ]);
     // Photos/hashes/embeddings are optional. If a migration hasn't run yet,
     // fall back to progressively fewer columns rather than failing the
     // customer-facing search outright.
     if(itemErr && /image_embedding/.test(itemErr.message || '')){
-      ({ data: itemRows, error: itemErr } = await sb.from('items').select('sku, description, usd, image_path, image_updated_at, image_phash'));
+      ({ data: itemRows, error: itemErr } = await sb.from('items').select('id, sku, description, usd, image_path, image_updated_at, image_phash'));
     }
     if(itemErr && /image_phash/.test(itemErr.message || '')){
-      ({ data: itemRows, error: itemErr } = await sb.from('items').select('sku, description, usd, image_path, image_updated_at'));
+      ({ data: itemRows, error: itemErr } = await sb.from('items').select('id, sku, description, usd, image_path, image_updated_at'));
     }
     if(itemErr && /image_path|image_updated_at/.test(itemErr.message || '')){
-      ({ data: itemRows, error: itemErr } = await sb.from('items').select('sku, description, usd'));
+      ({ data: itemRows, error: itemErr } = await sb.from('items').select('id, sku, description, usd'));
     }
     if(itemErr) throw itemErr;
     items = itemRows || [];
@@ -593,14 +593,21 @@ document.addEventListener('click', (e)=>{
 // reason to make the customer wait on a model load to confirm it.
 //
 // If that doesn't turn up a confident hit, visual recognition (
-// mobilenet-embed.js, image_embedding) takes over — it tolerates a
-// different angle, background, or lighting than the catalogue photo, which
-// covers the common case of a photo taken out in the wild.
+// visual-embed.js, image_embedding — a DINOv2 embedding) takes over — it
+// tolerates a different angle, background, or lighting than the catalogue
+// photo, which covers the common case of a photo taken out in the wild.
 const PHASH_MATCH_MAX = 5;       // how many candidates to show
 const PHASH_CLOSE_DIST = 12;     // out of 63 bits — see phash.js for the reasoning
 const PHASH_DUPLICATE_DIST = 6;  // tight enough to skip the model entirely
 const EMBED_MATCH_MAX = 5;
-const EMBED_CLOSE_SIM = 0.6;     // cosine similarity — a starting point, tune against real photos
+const EMBED_DIM = 384;           // must match visual-embed.js's DIM — a stored vector of any
+                                  // other length is stale, from a previous embedding model
+// Cosine similarity cutoff for "close match". Calibrated against the real
+// catalogue: unrelated products scored 0.04-0.72, the same photo scored
+// ~1.0 — this sits above that "different product" ceiling. Still a
+// starting point; tune further against real scanned photos once there's
+// usage data on where genuine same-product-different-angle pairs land.
+const EMBED_CLOSE_SIM = 0.8;
 
 function hydrateScanResults(){
   const btn = document.getElementById('scanBtn');
@@ -631,7 +638,7 @@ async function onScanFileChosen(e){
   document.getElementById('scanResults').innerHTML = '';
   if(!file){ status.textContent = ''; return; }
 
-  const withPhoto = items.filter(it => it.image_phash || (it.image_embedding && it.image_embedding.length));
+  const withPhoto = items.filter(it => it.image_phash || (it.image_embedding && it.image_embedding.length === EMBED_DIM));
   if(!withPhoto.length){
     status.textContent = 'No product photos have been scanned into the catalogue yet.';
     e.target.value = '';
@@ -665,7 +672,7 @@ async function onScanFileChosen(e){
     return;
   }
 
-  const withEmbedding = items.filter(it => it.image_embedding && it.image_embedding.length);
+  const withEmbedding = items.filter(it => it.image_embedding && it.image_embedding.length === EMBED_DIM);
   if(!withEmbedding.length){
     status.textContent = hashRanked[0] && hashRanked[0].dist <= PHASH_CLOSE_DIST
       ? 'Closest matches — tap one to see its price'
@@ -676,10 +683,11 @@ async function onScanFileChosen(e){
   }
 
   status.textContent = 'Loading visual recognition…';
+  const embedUrl = URL.createObjectURL(file); // PHash already revoked its own copy of this URL
   try{
-    const embedding = await window.MobileEmbed.compute(img);
+    const embedding = await window.VisualEmbed.compute(embedUrl);
     const embedRanked = withEmbedding
-      .map(it => ({ item: it, sim: window.MobileEmbed.cosineSimilarity(embedding, it.image_embedding) }))
+      .map(it => ({ item: it, sim: window.VisualEmbed.cosineSimilarity(embedding, it.image_embedding) }))
       .sort((a, b) => b.sim - a.sim)
       .slice(0, EMBED_MATCH_MAX);
 
@@ -701,6 +709,8 @@ async function onScanFileChosen(e){
     // whatever the pHash pre-check already found rather than a dead end.
     status.textContent = 'Nothing looked close. Closest guesses below, or search by SKU instead.';
     renderScanResults(hashResults());
+  }finally{
+    URL.revokeObjectURL(embedUrl);
   }
   e.target.value = '';
 }
