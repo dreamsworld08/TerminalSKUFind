@@ -203,9 +203,12 @@
     background:var(--surface-2);
   }
   .scan-card-body{ flex:1; min-width:0; }
-  .scan-card-sku{ font-family:var(--font-mono); font-size:12px; font-weight:600; color:var(--text); }
+  .scan-card-sku{
+    display:block; font-family:var(--font-mono); font-size:12px; font-weight:600; color:var(--text);
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+  }
   .scan-card-desc{
-    font-size:12.5px; color:var(--text-muted); margin-top:2px;
+    display:block; font-size:12.5px; color:var(--text-muted); margin-top:2px;
     overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
   }
   .scan-card-conf{
