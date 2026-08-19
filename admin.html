@@ -11,6 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="phash.js"></script>
+<script src="mobilenet-embed.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5/papaparse.min.js"></script>
 <style>
   :root{
@@ -862,6 +863,20 @@
           <span class="status" id="backfillHashStatus"></span>
         </div>
       </div>
+      <div class="card" style="margin-top:14px;">
+        <div class="img-cover">
+          <div class="img-cover-num tabular" id="embedCoverNum">—</div>
+          <div class="img-cover-bar"><div class="img-cover-fill" id="embedCoverFill"></div></div>
+          <div class="img-cover-lbl" id="embedCoverLbl">Loading…</div>
+        </div>
+        <div class="note" style="margin-top:10px;">Fingerprinting above only catches a re-photograph of the exact same
+          image. This uses an open-source vision model (MobileNet) so "Scan a photo" also recognises a piece from a
+          different angle, background, or lighting — computed automatically on every new upload.</div>
+        <div style="margin-top:12px;">
+          <button class="primary" id="backfillEmbedBtn">Compute visual recognition for existing photos</button>
+          <span class="status" id="backfillEmbedStatus"></span>
+        </div>
+      </div>
     </section>
 
     <section>
@@ -1417,10 +1432,12 @@ async function loadAll(){
 }
 
 const ITEM_COLS_BASE = 'id, sku, description, usd, length_mm, width_mm, height_mm, diameter_mm, dimension_sets, dimension_parse_status, dimension_raw, material, color, texture, material_review_status';
-const ITEM_COLS_IMAGES = ITEM_COLS_BASE + ', image_path, image_updated_at, image_phash';
 const ITEM_COLS_IMAGES_NO_PHASH = ITEM_COLS_BASE + ', image_path, image_updated_at';
+const ITEM_COLS_IMAGES_NO_EMBED = ITEM_COLS_IMAGES_NO_PHASH + ', image_phash';
+const ITEM_COLS_IMAGES = ITEM_COLS_IMAGES_NO_EMBED + ', image_embedding';
 let imagesReady = true;
 let phashReady = true;
+let embeddingReady = true;
 
 // The catalogue is small and changes rarely, so keep the last copy locally and
 // paint from it immediately. The network fetch still runs and overwrites it -
@@ -1464,10 +1481,17 @@ function paintItems(){
 
 async function loadItems(){
   let { data, error } = await sb.from('items').select(ITEM_COLS_IMAGES).order('sku');
-  // Graceful degradation, most-featured query first: if image_phash doesn't
-  // exist yet, drop just that; if the photo columns don't exist either, drop
-  // those too. A migration nobody has run yet must never take the whole page
-  // down over two or three missing columns.
+  // Graceful degradation, most-featured query first: if image_embedding
+  // doesn't exist yet, drop just that; if image_phash doesn't either, drop
+  // that too; if the photo columns don't exist either, drop those as well.
+  // A migration nobody has run yet must never take the whole page down over
+  // a handful of missing columns.
+  if(error && /image_embedding/.test(error.message || '')){
+    embeddingReady = false;
+    ({ data, error } = await sb.from('items').select(ITEM_COLS_IMAGES_NO_EMBED).order('sku'));
+  } else if(!error){
+    embeddingReady = true;
+  }
   if(error && /image_phash/.test(error.message || '')){
     phashReady = false;
     ({ data, error } = await sb.from('items').select(ITEM_COLS_IMAGES_NO_PHASH).order('sku'));
@@ -2178,8 +2202,22 @@ async function computePhashSafely(file){
   }catch(e){ return null; }
 }
 
+// window.MobileEmbed comes from mobilenet-embed.js; its absence, or the
+// model failing to load (offline, blocked CDN), must never block a photo
+// upload — same policy as computePhashSafely.
+async function computeEmbeddingSafely(file){
+  if(!window.MobileEmbed) return null;
+  try{
+    const img = await window.MobileEmbed.fileToImage(file);
+    const vec = await window.MobileEmbed.compute(img);
+    return window.MobileEmbed.toArray(vec);
+  }catch(e){ return null; }
+}
+
 async function uploadImageFor(item, file){
-  const [blob, phash] = await Promise.all([downscale(file), computePhashSafely(file)]);
+  const [blob, phash, embedding] = await Promise.all([
+    downscale(file), computePhashSafely(file), computeEmbeddingSafely(file)
+  ]);
   const path = 'items/' + item.id + '-' + Date.now() + '.jpg';
   const previous = item.image_path;
 
@@ -2187,8 +2225,18 @@ async function uploadImageFor(item, file){
     .upload(path, blob, { contentType: 'image/jpeg', upsert: true });
   if(upErr) throw new Error(upErr.message);
 
-  const patch = { image_path: path, image_updated_at: new Date().toISOString(), image_phash: phash };
+  const patch = {
+    image_path: path, image_updated_at: new Date().toISOString(),
+    image_phash: phash, image_embedding: embedding
+  };
   let { error: dbErr } = await sb.from('items').update(patch).eq('id', item.id);
+  if(dbErr && /image_embedding/.test(dbErr.message || '')){
+    // migration_image_embedding.sql hasn't been run yet — save the photo
+    // anyway, just without an embedding. Scanning falls back to pHash alone.
+    embeddingReady = false;
+    delete patch.image_embedding;
+    ({ error: dbErr } = await sb.from('items').update(patch).eq('id', item.id));
+  }
   if(dbErr && /image_phash/.test(dbErr.message || '')){
     // migration_image_phash.sql hasn't been run yet — save the photo anyway,
     // just without a hash. Scanning will pick this item up once it has one.
@@ -2208,7 +2256,7 @@ async function uploadImageFor(item, file){
 async function removeImageFor(item){
   const path = item.image_path;
   const { error } = await sb.from('items')
-    .update({ image_path: null, image_updated_at: null, image_phash: null }).eq('id', item.id);
+    .update({ image_path: null, image_updated_at: null, image_phash: null, image_embedding: null }).eq('id', item.id);
   if(error) throw new Error(error.message);
   if(path) sb.storage.from(IMAGE_BUCKET).remove([path]).catch(()=>{});
 }
@@ -2242,6 +2290,20 @@ function renderHashCoverage(){
     ? 'No photos uploaded yet'
     : pct + '% of photographed pieces are scannable' +
       (withHash < withPhoto.length ? ' · ' + (withPhoto.length - withHash) + ' need fingerprinting' : ' · complete');
+}
+
+function renderEmbedCoverage(){
+  const numEl = document.getElementById('embedCoverNum');
+  if(!numEl) return;
+  const withPhoto = items.filter(it => it.image_path);
+  const withEmbed = withPhoto.filter(it => it.image_embedding && it.image_embedding.length).length;
+  const pct = withPhoto.length ? Math.round(withEmbed / withPhoto.length * 100) : 0;
+  numEl.textContent = withEmbed + ' / ' + withPhoto.length;
+  document.getElementById('embedCoverFill').style.width = pct + '%';
+  document.getElementById('embedCoverLbl').textContent = !withPhoto.length
+    ? 'No photos uploaded yet'
+    : pct + '% of photographed pieces are visually recognisable' +
+      (withEmbed < withPhoto.length ? ' · ' + (withPhoto.length - withEmbed) + ' still to go' : ' · complete');
 }
 
 function siblingsOf(item){
@@ -2293,7 +2355,7 @@ function renderImageGrid(){
   }).join('');
 }
 
-function refreshImages(){ renderImageCoverage(); renderHashCoverage(); renderImageGrid(); }
+function refreshImages(){ renderImageCoverage(); renderHashCoverage(); renderEmbedCoverage(); renderImageGrid(); }
 
 // ----- backfill: fingerprint photos uploaded before this feature existed -----
 function urlToImage(url){
@@ -2346,6 +2408,60 @@ document.getElementById('backfillHashBtn').addEventListener('click', async () =>
   }
   const fail = loadFail + dbFail;
   statusEl.textContent = 'Done. ' + ok + ' fingerprinted' +
+    (fail ? ', ' + fail + ' failed (' +
+      [loadFail && (loadFail + ' image' + (loadFail===1?'':'s') + ' wouldn\'t load'),
+       dbFail && (dbFail + ' database write' + (dbFail===1?'':'s') + ' failed')]
+        .filter(Boolean).join(', ') + ' — safe to retry)' : '') + '.';
+  btn.disabled = false;
+});
+
+// ----- backfill: compute visual embeddings for photos uploaded before this feature existed -----
+document.getElementById('backfillEmbedBtn').addEventListener('click', async () => {
+  const statusEl = document.getElementById('backfillEmbedStatus');
+  const btn = document.getElementById('backfillEmbedBtn');
+  if(!window.MobileEmbed){ statusEl.textContent = 'mobilenet-embed.js did not load — check your connection and reload.'; return; }
+
+  const todo = items.filter(i => i.image_path && !(i.image_embedding && i.image_embedding.length));
+  if(!todo.length){ statusEl.textContent = 'Every photographed piece is already visually recognisable.'; return; }
+
+  btn.disabled = true;
+  statusEl.textContent = 'Loading the visual recognition model (first run only, ~16MB)…';
+  try{ await window.MobileEmbed.load(); }
+  catch(e){
+    statusEl.textContent = "Couldn't load the visual recognition model — check your connection and try again.";
+    btn.disabled = false;
+    return;
+  }
+
+  let ok = 0, loadFail = 0, dbFail = 0;
+  for(let i = 0; i < todo.length; i++){
+    const item = todo[i];
+    statusEl.textContent = 'Analysing ' + (i + 1) + ' of ' + todo.length + '…';
+    let embedding;
+    try{
+      const img = await urlToImage(imageUrl(item));
+      embedding = window.MobileEmbed.toArray(await window.MobileEmbed.compute(img));
+    }catch(e){ loadFail++; continue; }
+
+    const { error } = await sb.from('items').update({ image_embedding: embedding }).eq('id', item.id);
+    if(error){
+      // Same reasoning as the pHash backfill: a missing column fails every
+      // remaining attempt identically, so say so once instead of 77 times.
+      if(/image_embedding/.test(error.message || '')){
+        statusEl.textContent = 'The image_embedding column doesn\'t exist on your database yet. ' +
+          'Run migration_image_embedding.sql once in the Supabase SQL Editor, then try this again.';
+        btn.disabled = false;
+        return;
+      }
+      dbFail++;
+      continue;
+    }
+    item.image_embedding = embedding; // keep the in-memory copy in sync without a full reload
+    ok++;
+    renderEmbedCoverage();
+  }
+  const fail = loadFail + dbFail;
+  statusEl.textContent = 'Done. ' + ok + ' analysed' +
     (fail ? ', ' + fail + ' failed (' +
       [loadFail && (loadFail + ' image' + (loadFail===1?'':'s') + ' wouldn\'t load'),
        dbFail && (dbFail + ' database write' + (dbFail===1?'':'s') + ' failed')]

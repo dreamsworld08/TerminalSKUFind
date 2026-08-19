@@ -62,22 +62,33 @@ The full migration (additive, nullable columns only) is in `migration_furniture_
 
 ## Scan a photo (optional)
 
-The public page can identify a product from a photo instead of a SKU. It's
-perceptual-hash matching (`phash.js`, shared by both pages), not a vision
-model — a photo maps to a 63-bit fingerprint such that visually similar
-photos land close together, even after resizing or recompression.
+The public page can identify a product from a photo instead of a SKU, using
+two matchers together:
 
-There's no separate pipeline to keep in sync: `admin.html` computes the
-fingerprint automatically the moment a photo is uploaded, using the same
-`uploadImageFor()` that saves the file, and stores it in `items.image_phash`.
-A photo taken today is scannable within seconds, with no script to run and
-no file to redeploy.
+- **Perceptual hash** (`phash.js`, `items.image_phash`) recognises a
+  re-photograph of the exact same catalogue image — a photo maps to a 63-bit
+  fingerprint such that visually similar photos land close together, even
+  after resizing or recompression. It's instant and needs no download, so it
+  runs first as a pre-check.
+- **Visual recognition** (`mobilenet-embed.js`, `items.image_embedding`)
+  covers the case pHash can't: the same product photographed from a
+  different angle, background, or lighting. It runs MobileNetV2, an
+  open-source vision model, entirely in the browser via TensorFlow.js
+  (fetched from a CDN, ~16MB, cached after first use) and compares photos by
+  the cosine similarity of their feature vectors rather than raw pixels.
 
-Setup: run `migration_image_phash.sql` once (adds one nullable column).
-Existing photos uploaded before this feature existed won't have a
-fingerprint yet — **Admin → Product photos → "Fingerprint existing
-photos"** backfills them by re-fetching each one and hashing it, same as a
-fresh upload would have.
+There's no separate pipeline to keep in sync: `admin.html` computes both the
+fingerprint and the embedding automatically the moment a photo is uploaded,
+using the same `uploadImageFor()` that saves the file. A photo taken today
+is scannable within seconds, with no script to run and no file to redeploy.
+
+Setup: run `migration_image_phash.sql` and `migration_image_embedding.sql`
+once each (each adds one nullable column). Existing photos uploaded before
+these features existed won't have a fingerprint or embedding yet — **Admin →
+Product photos → "Fingerprint existing photos"** and **"Compute visual
+recognition for existing photos"** backfill them by re-fetching each photo
+and processing it, same as a fresh upload would have. Either can be skipped;
+each degrades gracefully and the other keeps working.
 
 ## AI suggestions (optional)
 

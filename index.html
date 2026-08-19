@@ -11,6 +11,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="phash.js"></script>
+<script src="mobilenet-embed.js"></script>
 <style>
   :root{
     --accent:#F97F29;
@@ -409,12 +410,15 @@ async function loadAll(){
   const loadingNote = document.getElementById('loadingNote');
   try{
     let [{ data: itemRows, error: itemErr }, { data: rateRow, error: rateErr }] = await Promise.all([
-      sb.from('items').select('sku, description, usd, image_path, image_updated_at, image_phash'),
+      sb.from('items').select('sku, description, usd, image_path, image_updated_at, image_phash, image_embedding'),
       sb.from('settings').select('value').eq('key', 'usd_inr_rate').maybeSingle()
     ]);
-    // Photos/hashes are optional. If a migration hasn't run yet, fall back to
-    // progressively fewer columns rather than failing the customer-facing
-    // search outright.
+    // Photos/hashes/embeddings are optional. If a migration hasn't run yet,
+    // fall back to progressively fewer columns rather than failing the
+    // customer-facing search outright.
+    if(itemErr && /image_embedding/.test(itemErr.message || '')){
+      ({ data: itemRows, error: itemErr } = await sb.from('items').select('sku, description, usd, image_path, image_updated_at, image_phash'));
+    }
     if(itemErr && /image_phash/.test(itemErr.message || '')){
       ({ data: itemRows, error: itemErr } = await sb.from('items').select('sku, description, usd, image_path, image_updated_at'));
     }
@@ -579,13 +583,24 @@ document.addEventListener('click', (e)=>{
   if(wrap && !wrap.contains(e.target)) hideSuggestions();
 });
 
-// ===== Scan a photo — client-side perceptual hash =====
-// Hashes are computed once, in admin.html, at the moment a product photo is
-// uploaded, and stored on the row (image_phash). This page only ever reads
-// them — no separate script, no separate deploy step, no file to keep in
-// sync. A photo taken today is scannable the moment it's uploaded.
-const PHASH_MATCH_MAX = 5;    // how many candidates to show
-const PHASH_CLOSE_DIST = 12;  // out of 63 bits — see phash.js for the reasoning
+// ===== Scan a photo — hybrid pHash + visual recognition =====
+// Two matchers, both computed once in admin.html at upload time and stored
+// on the row — this page only ever reads them, no separate deploy step.
+//
+// pHash (phash.js, image_phash) only recognises a re-photograph of the same
+// catalogue image, but it's instant and needs no download, so it runs first
+// as a pre-check: a tight match is almost certainly right, and there's no
+// reason to make the customer wait on a model load to confirm it.
+//
+// If that doesn't turn up a confident hit, visual recognition (
+// mobilenet-embed.js, image_embedding) takes over — it tolerates a
+// different angle, background, or lighting than the catalogue photo, which
+// covers the common case of a photo taken out in the wild.
+const PHASH_MATCH_MAX = 5;       // how many candidates to show
+const PHASH_CLOSE_DIST = 12;     // out of 63 bits — see phash.js for the reasoning
+const PHASH_DUPLICATE_DIST = 6;  // tight enough to skip the model entirely
+const EMBED_MATCH_MAX = 5;
+const EMBED_CLOSE_SIM = 0.6;     // cosine similarity — a starting point, tune against real photos
 
 function hydrateScanResults(){
   const btn = document.getElementById('scanBtn');
@@ -594,42 +609,9 @@ function hydrateScanResults(){
   document.getElementById('scanFile').addEventListener('change', onScanFileChosen);
 }
 
-async function onScanFileChosen(e){
-  const file = e.target.files && e.target.files[0];
-  const status = document.getElementById('scanStatus');
-  const results = document.getElementById('scanResults');
-  results.innerHTML = '';
-  if(!file){ status.textContent = ''; return; }
-
-  const hashed = items.filter(it => it.image_phash);
-  if(!hashed.length){
-    status.textContent = 'No product photos have been scanned into the catalogue yet.';
-    e.target.value = '';
-    return;
-  }
-
-  status.textContent = 'Reading photo…';
-  let hash;
-  try{
-    const img = await window.PHash.fileToImage(file);
-    hash = window.PHash.compute(img);
-  }catch(err){
-    status.textContent = "Couldn't read that image — try a different photo.";
-    e.target.value = '';
-    return;
-  }
-
-  const ranked = hashed
-    .map(it => ({ item: it, dist: window.PHash.hammingDistance(hash, it.image_phash) }))
-    .sort((a, b) => a.dist - b.dist)
-    .slice(0, PHASH_MATCH_MAX);
-
-  status.textContent = ranked[0] && ranked[0].dist <= PHASH_CLOSE_DIST
-    ? 'Closest matches — tap one to see its price'
-    : 'Nothing looked close. Closest guesses below, or search by SKU instead.';
-
-  results.innerHTML = ranked.map(({ item, dist }) => {
-    const close = dist <= PHASH_CLOSE_DIST;
+function renderScanResults(ranked){
+  document.getElementById('scanResults').innerHTML = ranked.map(({ item, label }) => {
+    const close = label !== 'Unlikely';
     return `<button type="button" class="scan-card" data-sku="${item.sku}">` +
       (item.image_path
         ? `<img class="scan-thumb" src="${imageUrl(item)}" alt="" loading="lazy">`
@@ -638,10 +620,88 @@ async function onScanFileChosen(e){
         `<span class="scan-card-sku">${item.sku}</span>` +
         `<span class="scan-card-desc">${item.description}</span>` +
       `</span>` +
-      `<span class="scan-card-conf ${close ? 'is-close' : 'is-far'}">${close ? 'Close match' : 'Unlikely'}</span>` +
+      `<span class="scan-card-conf ${close ? 'is-close' : 'is-far'}">${label}</span>` +
     `</button>`;
   }).join('');
+}
 
+async function onScanFileChosen(e){
+  const file = e.target.files && e.target.files[0];
+  const status = document.getElementById('scanStatus');
+  document.getElementById('scanResults').innerHTML = '';
+  if(!file){ status.textContent = ''; return; }
+
+  const withPhoto = items.filter(it => it.image_phash || (it.image_embedding && it.image_embedding.length));
+  if(!withPhoto.length){
+    status.textContent = 'No product photos have been scanned into the catalogue yet.';
+    e.target.value = '';
+    return;
+  }
+
+  status.textContent = 'Reading photo…';
+  let img;
+  try{
+    img = await window.PHash.fileToImage(file);
+  }catch(err){
+    status.textContent = "Couldn't read that image — try a different photo.";
+    e.target.value = '';
+    return;
+  }
+
+  const hash = window.PHash.compute(img);
+  const hashRanked = items
+    .filter(it => it.image_phash)
+    .map(it => ({ item: it, dist: window.PHash.hammingDistance(hash, it.image_phash) }))
+    .sort((a, b) => a.dist - b.dist);
+
+  const hashResults = () => hashRanked.slice(0, PHASH_MATCH_MAX).map(({ item, dist }) => ({
+    item, label: dist <= PHASH_DUPLICATE_DIST ? 'Exact match' : dist <= PHASH_CLOSE_DIST ? 'Close match' : 'Unlikely'
+  }));
+
+  if(hashRanked[0] && hashRanked[0].dist <= PHASH_DUPLICATE_DIST){
+    status.textContent = 'Exact match found — tap it to see its price';
+    renderScanResults(hashResults());
+    e.target.value = '';
+    return;
+  }
+
+  const withEmbedding = items.filter(it => it.image_embedding && it.image_embedding.length);
+  if(!withEmbedding.length){
+    status.textContent = hashRanked[0] && hashRanked[0].dist <= PHASH_CLOSE_DIST
+      ? 'Closest matches — tap one to see its price'
+      : 'Nothing looked close. Closest guesses below, or search by SKU instead.';
+    renderScanResults(hashResults());
+    e.target.value = '';
+    return;
+  }
+
+  status.textContent = 'Loading visual recognition…';
+  try{
+    const embedding = await window.MobileEmbed.compute(img);
+    const embedRanked = withEmbedding
+      .map(it => ({ item: it, sim: window.MobileEmbed.cosineSimilarity(embedding, it.image_embedding) }))
+      .sort((a, b) => b.sim - a.sim)
+      .slice(0, EMBED_MATCH_MAX);
+
+    // Merge: visual-recognition ranking leads, any close pHash match not
+    // already in the list is added rather than dropped.
+    const merged = new Map();
+    embedRanked.forEach(({ item, sim }) => merged.set(item.id, { item, label: sim >= EMBED_CLOSE_SIM ? 'Close match' : 'Unlikely' }));
+    hashRanked.slice(0, PHASH_MATCH_MAX).forEach(({ item, dist }) => {
+      if(dist <= PHASH_CLOSE_DIST && !merged.has(item.id)) merged.set(item.id, { item, label: 'Close match' });
+    });
+
+    const ranked = Array.from(merged.values()).slice(0, PHASH_MATCH_MAX);
+    status.textContent = ranked.some(r => r.label !== 'Unlikely')
+      ? 'Closest matches — tap one to see its price'
+      : 'Nothing looked close. Closest guesses below, or search by SKU instead.';
+    renderScanResults(ranked);
+  }catch(err){
+    // Model failed to load (offline, blocked CDN, etc.) — fall back to
+    // whatever the pHash pre-check already found rather than a dead end.
+    status.textContent = 'Nothing looked close. Closest guesses below, or search by SKU instead.';
+    renderScanResults(hashResults());
+  }
   e.target.value = '';
 }
 
