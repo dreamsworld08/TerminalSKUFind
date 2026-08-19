@@ -70,12 +70,18 @@ two matchers together:
   fingerprint such that visually similar photos land close together, even
   after resizing or recompression. It's instant and needs no download, so it
   runs first as a pre-check.
-- **Visual recognition** (`mobilenet-embed.js`, `items.image_embedding`)
+- **Visual recognition** (`visual-embed.js`, `items.image_embedding`)
   covers the case pHash can't: the same product photographed from a
-  different angle, background, or lighting. It runs MobileNetV2, an
-  open-source vision model, entirely in the browser via TensorFlow.js
-  (fetched from a CDN, ~16MB, cached after first use) and compares photos by
-  the cosine similarity of their feature vectors rather than raw pixels.
+  different angle, background, or lighting. It runs DINOv2-small, an
+  open-source vision model, entirely in the browser via transformers.js
+  (fetched from a CDN, ~90MB, cached after first use) and compares photos by
+  the cosine similarity of their feature vectors rather than raw pixels. An
+  earlier version used MobileNetV2, which was faster to download but — on
+  testing against the real catalogue — couldn't reliably tell different
+  products apart (unrelated items scored 0.58–0.63 cosine similarity,
+  crowded right at the match threshold); DINOv2 was trained for this kind of
+  instance-level similarity rather than generic classification, and spread
+  the same test from ~0.04 to ~0.72.
 
 There's no separate pipeline to keep in sync: `admin.html` computes both the
 fingerprint and the embedding automatically the moment a photo is uploaded,
